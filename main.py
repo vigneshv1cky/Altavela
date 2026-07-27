@@ -157,17 +157,21 @@ async def _watcher_loop():
 async def _desk() -> None:
     """One-shot run: fetch markets, scout, debate, write to ledger."""
     from altavela.config import REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT
-    from altavela.ingest.polymarket import fetch_markets
+    from altavela.ingest.polymarket import fetch_markets, quality_filter
     from altavela.desk.scout import run_scout
     from altavela.ledger import store
 
     log = logging.getLogger("altavela.desk")
 
     log.info("Fetching active prediction markets…")
-    markets = fetch_markets(limit=50, min_volume=1000)
-
+    markets = fetch_markets(limit=50, min_volume=10000)
     if not markets:
         log.info("No active markets found")
+        return
+
+    markets = quality_filter(markets)
+    if not markets:
+        log.info("No markets passed quality filter")
         return
 
     # Filter: skip markets debated recently unless price moved significantly
