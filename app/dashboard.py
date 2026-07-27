@@ -27,9 +27,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Basic Auth middleware
+    # Basic Auth middleware — applied to /api/* only, static files are public
     @app.middleware("http")
     async def basic_auth(request: Request, call_next):
+        if not request.url.path.startswith("/api/"):
+            return await call_next(request)
         from altavela.config import ADMIN_USERNAME, ADMIN_PASSWORD
         if not ADMIN_PASSWORD:
             return await call_next(request)
