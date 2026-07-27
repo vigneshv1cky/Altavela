@@ -1,15 +1,13 @@
 import { useState, useRef, useEffect } from "react"
 
 interface Ev {
-  type: string
-  msg?: string; market_id?: string; question?: string; direction?: string
+  type: string; msg?: string; market_id?: string; question?: string; direction?: string
   score?: number; adjusted_score?: number; approved?: boolean; flipped?: boolean
   edge_hint?: string; reason?: string; claim?: string; evidence?: string
   stance?: string; counter_direction?: string; counter?: string
   concede?: boolean; revised_score?: number; verdict?: string; summary?: string
   pick_id?: number; est_probability?: number; entry?: number; now?: number
 }
-
 interface Pick { id: number; question: string; direction: string; score: number; entry_price: number | null; current_price: number | null; pnl_pct: number | null }
 interface Stats { total_picks: number; resolved: number; wins: number; win_rate: number | null }
 interface TimelineRow { id: number; ts: string; question: string; direction: string; resolved: number; outcome: number | null; adjusted_score: number; verdict: string; approved: number }
@@ -29,16 +27,16 @@ function TermLine({ ev }: { ev: Ev }) {
   let body = ""
   switch (ev.type) {
     case "status": body = ev.msg ?? ""; break
-    case "scout_pick": body = `${ev.question?.slice(0, 80)} \u00b7 ${ev.direction} \u00b7 ${ev.edge_hint} \u2014 ${ev.reason ?? ""}`; break
+    case "scout_pick": body = `${ev.question?.slice(0, 80)} · ${ev.direction} · ${ev.edge_hint} — ${ev.reason ?? ""}`; break
     case "gate": body = `${ev.question?.slice(0, 60)} skipped: ${ev.reason ?? ""}`; break
-    case "debate_start": body = `${ev.question?.slice(0, 60)} \u00b7 ${ev.edge_hint ?? ""}`; break
+    case "debate_start": body = `${ev.question?.slice(0, 60)} · ${ev.edge_hint ?? ""}`; break
     case "evidence": body = `${ev.msg ?? ""}`; break
-    case "thesis": body = `${ev.direction} \u00b7 prob ${(ev.est_probability ?? 0).toFixed(2)} \u00b7 score ${ev.score}/100`; break
+    case "thesis": body = `${ev.direction} · prob ${(ev.est_probability ?? 0).toFixed(2)} · score ${ev.score}/100`; break
     case "concern": body = `${ev.claim ?? ""}`; break
-    case "counter": body = ev.stance === "FLIP" ? `FLIP \u2192 ${ev.counter_direction}` : "STAND_ASIDE"; break
-    case "rebuttal": body = `score \u2192 ${ev.revised_score}/100 (concede: ${ev.concede ? "yes" : "no"})`; break
-    case "decision": body = `${ev.direction} \u00b7 ${ev.approved ? "APPROVED" : "thin lean"} \u00b7 ${ev.verdict} \u00b7 ${ev.adjusted_score}/100${ev.flipped ? " \u00b7 REVERSED" : ""}`; break
-    case "done": body = `Run complete \u2014 ${ev.msg ?? ""}`; break
+    case "counter": body = ev.stance === "FLIP" ? `FLIP → ${ev.counter_direction}` : "STAND_ASIDE"; break
+    case "rebuttal": body = `score → ${ev.revised_score}/100 (concede: ${ev.concede ? "yes" : "no"})`; break
+    case "decision": body = `${ev.direction} · ${ev.approved ? "APPROVED" : "thin lean"} · ${ev.verdict} · ${ev.adjusted_score}/100${ev.flipped ? " · REVERSED" : ""}`; break
+    case "done": body = `Run complete — ${ev.msg ?? ""}`; break
     default: body = JSON.stringify(ev)
   }
   return (
@@ -56,9 +54,9 @@ export default function App() {
   const [positions, setPositions] = useState<Pick[]>([])
   const [timeline, setTimeline] = useState<TimelineRow[]>([])
   const [tokens, setTokens] = useState<{ usage: TokenRow[]; total_tokens: number }>({ usage: [], total_tokens: 0 })
-  const [rightTab, setRightTab] = useState<"positions" | "track" | "tokens">("positions")
   const esRef = useRef<EventSource | null>(null)
   const termRef = useRef<HTMLDivElement | null>(null)
+  const [rightTab, setRightTab] = useState<string>("positions")
 
   async function refresh() {
     const s = await fetch("/api/stats").then(r => r.json()); setStats(s)
@@ -92,12 +90,12 @@ export default function App() {
           <div className="text-right text-[11px] text-zinc-500 leading-tight">
             <div>{stats.total_picks} picks · {stats.resolved} resolved</div>
             <div className={winRate != null && winRate > 50 ? "text-emerald-400" : "text-zinc-500"}>
-              {winRate != null ? `${winRate}% win` : "\u2014"}
+              {winRate != null ? `${winRate}% win` : "—"}
             </div>
           </div>
           <button onClick={run} disabled={running}
             className="rounded bg-indigo-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
-            {running ? "Scanning\u2026" : "Find Markets"}
+            {running ? "Scanning…" : "Find Markets"}
           </button>
         </div>
       </div>
@@ -110,7 +108,7 @@ export default function App() {
               <div ref={termRef} className="no-scrollbar h-full overflow-y-auto px-4 py-3 space-y-3">
                 {positions.length > 0 && (
                   <div>
-                    <div className="text-zinc-500 mb-1 text-[13px]">\u2500\u2500 Open Positions \u2500\u2500</div>
+                    <div className="text-zinc-500 mb-1 text-[13px]">── Open Positions ──</div>
                     {positions.map(p => (
                       <div key={p.id} className="text-[13px] leading-relaxed">
                         <span className={p.direction === "BUY_YES" ? "text-emerald-400" : "text-red-400"}>[{p.direction}]</span>{" "}
@@ -142,7 +140,7 @@ export default function App() {
                   }
                   return (
                     <>
-                      <div className="text-zinc-500 mb-1 text-[13px]">\u2500\u2500 Live Feed \u2500\u2500</div>
+                      <div className="text-zinc-500 mb-1 text-[13px]">── Live Feed ──</div>
                       {groups.map((g, gi) => (
                         <div key={gi}>
                           {gi > 0 && <div className="border-t border-zinc-800 my-2" />}
@@ -161,12 +159,12 @@ export default function App() {
         </div>
 
         {/* RIGHT — stats panel */}
-        <div className="w-72 shrink-0 flex flex-col gap-3 min-h-0">
-          <div className="flex gap-1">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <div className="grid grid-cols-3 bg-zinc-900 rounded-lg p-0.5 mb-2">
             {(["positions","track","tokens"] as const).map(t => (
               <button key={t} onClick={() => setRightTab(t)}
-                className={`flex-1 rounded px-2 py-1 text-[11px] font-medium ${
-                  rightTab === t ? "bg-zinc-800 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"}`}>
+                className={`rounded px-3 py-1.5 text-[11px] font-medium ${
+                  rightTab === t ? "bg-zinc-800 text-zinc-200 shadow-sm" : "text-zinc-500 hover:text-zinc-300"}`}>
                 {t === "positions" ? "Live" : t === "track" ? "Track" : "Tokens"}
               </button>
             ))}
@@ -191,7 +189,7 @@ export default function App() {
                       )}
                     </div>
                     <div className="text-zinc-300 truncate">{p.question?.slice(0, 50)}</div>
-                    <div className="text-zinc-600">entry {p.entry_price}{p.current_price != null ? ` \u00b7 now ${p.current_price}` : ""}</div>
+                    <div className="text-zinc-600">entry {p.entry_price}{p.current_price != null ? ` · now ${p.current_price}` : ""}</div>
                   </div>
                 ))}
               </div>
@@ -200,19 +198,13 @@ export default function App() {
             {rightTab === "track" && (
               <div className="space-y-2">
                 <div className="text-[11px] text-zinc-500">Track Record</div>
-                {timeline.length === 0 ? (
-                  <div className="text-[12px] text-zinc-600">No picks yet</div>
-                ) : timeline.filter(t => t.resolved).length === 0 ? (
-                  <div className="text-[12px] text-zinc-600">No resolved picks</div>
+                {timeline.filter(t => t.resolved).length === 0 ? (
+                  <div className="text-[12px] text-zinc-600">No resolved picks yet</div>
                 ) : timeline.filter(t => t.resolved).map(t => (
                   <div key={t.id} className="border-b border-zinc-800 pb-1.5 text-[12px]">
                     <div className="flex justify-between">
-                      <span className={t.direction === "BUY_YES" ? "text-emerald-400" : "text-red-400"}>
-                        {t.direction}
-                      </span>
-                      <span className={t.outcome === 1 ? "text-emerald-400" : "text-red-400"}>
-                        {t.outcome === 1 ? "WIN" : "LOSS"}
-                      </span>
+                      <span className={t.direction === "BUY_YES" ? "text-emerald-400" : "text-red-400"}>{t.direction}</span>
+                      <span className={t.outcome === 1 ? "text-emerald-400" : "text-red-400"}>{t.outcome === 1 ? "WIN" : "LOSS"}</span>
                     </div>
                     <div className="text-zinc-300 truncate">{t.question?.slice(0, 50)}</div>
                     <div className="text-zinc-600">conf {(t.adjusted_score ?? 0).toFixed(0)} · {t.verdict}</div>
@@ -228,9 +220,7 @@ export default function App() {
                   <div className="text-[12px] text-zinc-600">No usage yet</div>
                 ) : (
                   <>
-                    <div className="text-[12px] text-zinc-400 mb-1">
-                      Total: {(tokens.total_tokens / 1000).toFixed(0)}k tokens
-                    </div>
+                    <div className="text-[12px] text-zinc-400 mb-1">Total: {(tokens.total_tokens / 1000).toFixed(0)}k tokens</div>
                     {tokens.usage.map((t, i) => (
                       <div key={i} className="text-[12px] text-zinc-500 flex justify-between">
                         <span>{t.role}</span>
