@@ -209,6 +209,29 @@ def stats() -> dict:
     }
 
 
+def markets_debated_since(hours: float) -> dict[str, dict]:
+    """Return {market_id: {ts, market_yes_price, market_no_price}} for markets
+    debated within the last N hours, so the scout can skip them unless the
+    price has moved significantly."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT market_id, ts, market_yes_price, market_no_price FROM picks"
+            " WHERE arm='TEAM' AND ts >= datetime('now', ?)"
+            " ORDER BY ts DESC",
+            (f"-{hours * 3600:.0f} seconds",),
+        ).fetchall()
+    out: dict[str, dict] = {}
+    for r in rows:
+        mid = r["market_id"]
+        if mid and mid not in out:  # only keep the most recent per market
+            out[mid] = {
+                "ts": r["ts"],
+                "yes_price": r["market_yes_price"],
+                "no_price": r["market_no_price"],
+            }
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Token sink
 # ---------------------------------------------------------------------------

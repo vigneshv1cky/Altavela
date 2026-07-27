@@ -156,6 +156,7 @@ async def _watcher_loop():
 
 async def _desk() -> None:
     """One-shot run: fetch markets, scout, debate, write to ledger."""
+    from altavela.config import REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT
     from altavela.ingest.polymarket import fetch_markets
     from altavela.desk.scout import run_scout
     from altavela.ledger import store
@@ -169,8 +170,35 @@ async def _desk() -> None:
         log.info("No active markets found")
         return
 
-    log.info("Scout scanning %d markets…", len(markets))
-    result = run_scout(markets)
+    # Filter: skip markets debated recently unless price moved significantly
+    recent = store.markets_debated_since(REPICK_COOLDOWN_HOURS)
+    fresh_markets = []
+    skipped_cooldown = 0
+    for m in markets:
+        mid = m.get("id", "")
+        if mid in recent:
+            prev = recent[mid]
+            prices = m.get("prices", [0.5, 0.5])
+            cur_yes = prices[0] if len(prices) > 0 else 0.5
+            prev_yes = prev.get("yes_price") or 0.5
+            if prev_yes > 0:
+                move = abs(cur_yes - prev_yes) / prev_yes * 100
+                if move < REPICK_MIN_PRICE_MOVE_PCT:
+                    skipped_cooldown += 1
+                    continue
+        fresh_markets.append(m)
+
+    if skipped_cooldown:
+        log.info("Cooldown: %d markets skipped (debated <%.0fh, price move <%.0f%%)",
+                 skipped_cooldown, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT)
+
+    if not fresh_markets:
+        log.info("No fresh markets after cooldown filter")
+        return
+
+    log.info("Scout scanning %d markets (%d skipped by cooldown)…",
+             len(fresh_markets), skipped_cooldown)
+    result = run_scout(fresh_markets)
     picks = result.get("picks", [])
 
     if not picks:
@@ -182,7 +210,7 @@ async def _desk() -> None:
     # Simple sequential debate (no streaming — headless mode)
     for pick in picks:
         mid = pick["market_id"]
-        market = next((m for m in markets if m["id"] == mid), {})
+        market = next((m for m in fresh_markets if m["id"] == mid), {})
         if not market:
             continue
 
