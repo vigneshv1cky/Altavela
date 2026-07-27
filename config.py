@@ -5,7 +5,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+_ENV_FILE = os.environ.get("ALTAVELA_ENV", ".env")
+load_dotenv(_ENV_FILE, override=True)
 
 DATA_DIR = Path(os.environ.get("ALTAVELA_DATA", "~/.altavela")).expanduser()
 DATA_DIR.mkdir(parents=True, exist_ok=True)

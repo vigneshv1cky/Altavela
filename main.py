@@ -13,14 +13,74 @@ logging.basicConfig(
 
 
 async def _serve() -> None:
+    """Dashboard + autorun loop + grader loop."""
     from altavela.app.dashboard import create_app
     from altavela.config import DASHBOARD_HOST, DASHBOARD_PORT
 
+    # Always bind to all interfaces on a server, regardless of config default
+    host = "0.0.0.0" if DASHBOARD_HOST == "127.0.0.1" else DASHBOARD_HOST
     app = create_app()
+
+    async def _grader_loop():
+        from altavela.ledger.grader import grade_due
+        loop = asyncio.get_running_loop()
+        log = logging.getLogger("altavela.grader")
+        while True:
+            try:
+                n = await loop.run_in_executor(None, grade_due)
+                if n:
+                    log.info("Graded %d picks", n)
+            except Exception as exc:
+                log.error("grader error: %s", exc)
+            await asyncio.sleep(3600)
+
+    async def _autorun_loop():
+        from datetime import datetime, timedelta
+        from altavela.config import AUTORUN_END_ET, AUTORUN_INTERVAL_HOURS, AUTORUN_START_ET
+        from zoneinfo import ZoneInfo
+        ET = ZoneInfo("America/New_York")
+        log = logging.getLogger("altavela.autorun")
+
+        if AUTORUN_INTERVAL_HOURS <= 0 or not AUTORUN_START_ET:
+            log.info("Auto-run disabled")
+            return
+        try:
+            s_h, s_m = (int(x) for x in AUTORUN_START_ET.split(":"))
+            e_h, e_m = (int(x) for x in AUTORUN_END_ET.split(":"))
+        except Exception:
+            log.error("Bad AUTORUN_START/END_ET")
+            return
+
+        interval = timedelta(hours=AUTORUN_INTERVAL_HOURS)
+        log.info("Auto-run: every %gh, %s–%s ET", AUTORUN_INTERVAL_HOURS, AUTORUN_START_ET, AUTORUN_END_ET)
+        running = False
+        while True:
+            try:
+                now = datetime.now(ET)
+                in_window = ((now.hour, now.minute) >= (s_h, s_m) and
+                             (now.hour, now.minute) < (e_h, e_m))
+                mins_since_start = (now.hour - s_h) * 60 + (now.minute - s_m)
+                next_slot_min = ((mins_since_start // int(AUTORUN_INTERVAL_HOURS * 60)) + 1) * int(AUTORUN_INTERVAL_HOURS * 60)
+                next_slot = now.replace(hour=s_h + next_slot_min // 60,
+                                        minute=next_slot_min % 60,
+                                        second=0, microsecond=0)
+
+                if in_window and not running and now >= next_slot:
+                    running = True
+                    try:
+                        log.info("Auto-run: firing")
+                        await _desk()
+                        log.info("Auto-run complete")
+                    finally:
+                        running = False
+            except Exception as exc:
+                log.error("auto-run error: %s", exc)
+            await asyncio.sleep(60)
+
     import uvicorn
-    config = uvicorn.Config(app, host=DASHBOARD_HOST, port=DASHBOARD_PORT, log_level="info")
+    config = uvicorn.Config(app, host=host, port=DASHBOARD_PORT, log_level="info")
     server = uvicorn.Server(config)
-    await server.serve()
+    await asyncio.gather(_grader_loop(), _autorun_loop(), server.serve())
 
 
 async def _desk() -> None:
