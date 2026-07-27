@@ -208,14 +208,21 @@ async def _desk() -> None:
     log.info("Scout picked %d markets for debate", len(picks))
 
     # Simple sequential debate (no streaming — headless mode)
+    from altavela.ingest.evidence import gather_evidence
+
     for pick in picks:
         mid = pick["market_id"]
         market = next((m for m in fresh_markets if m["id"] == mid), {})
         if not market:
             continue
 
-        log.info("Debating: %s", pick["question"][:80])
-        async for ev in _debate_one(market, pick):
+        # Gather real-world evidence for the researcher
+        loop = asyncio.get_running_loop()
+        evidence = await loop.run_in_executor(
+            None, gather_evidence, pick["question"], market.get("tags"))
+
+        log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
+        async for ev in _debate_one(market, pick, evidence):
             t = ev.get("type", "")
             if t == "thesis":
                 log.info("  Thesis: %s score=%s", ev.get("direction"), ev.get("score"))
@@ -230,9 +237,10 @@ async def _desk() -> None:
     log.info("Run complete: %d picks debated", len(picks))
 
 
-async def _debate_one(market, pick):
+async def _debate_one(market, pick, evidence=None):
     from altavela.desk.debate import deliberate
-    async for ev in deliberate(market, pick, [], "DESK", None):
+    evidence = evidence or []
+    async for ev in deliberate(market, pick, evidence, "DESK", None):
         yield ev
 
 
