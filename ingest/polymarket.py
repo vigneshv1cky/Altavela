@@ -146,46 +146,21 @@ def fetch_markets(
 
 
 def quality_filter(markets: list[dict]) -> list[dict]:
-    """Filter out low-quality markets: near-expiry, extreme prices, non-binary.
-    Returns filtered list and logs what was dropped."""
-    from datetime import datetime, timedelta, timezone
-
-    now = datetime.now(timezone.utc)
-    cutoff = now + timedelta(hours=1)
+    """Remove unprocessable markets: non-binary (>2 outcomes). Everything else
+    — extreme prices, near-expiry, low volume — is the scout's judgment call.
+    Code removes what it knows is useless; agents decide what's edge."""
     filtered = []
-    dropped_expiry = dropped_binary = dropped_price = 0
+    dropped = 0
 
     for m in markets:
-        # Skip markets closing within 1 hour — noise, not edge
-        end_str = m.get("end_date", "")
-        if end_str:
-            try:
-                end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
-                if end <= cutoff:
-                    dropped_expiry += 1
-                    continue
-            except (ValueError, TypeError):
-                pass
-
-        # Skip non-binary markets (>2 outcomes)
         outcomes = m.get("outcomes", [])
         if len(outcomes) != 2:
-            dropped_binary += 1
+            dropped += 1
             continue
-
-        # Skip extreme prices — no edge left (<$0.02 or >$0.98)
-        prices = m.get("prices", [0.5, 0.5])
-        yes_px = prices[0] if len(prices) > 0 else 0.5
-        no_px = prices[1] if len(prices) > 1 else 0.5
-        if yes_px < 0.02 or yes_px > 0.98 or no_px < 0.02 or no_px > 0.98:
-            dropped_price += 1
-            continue
-
         filtered.append(m)
 
-    if dropped_expiry or dropped_binary or dropped_price:
-        log.info("Quality filter: %d near-expiry, %d non-binary, %d extreme-price — %d passed",
-                 dropped_expiry, dropped_binary, dropped_price, len(filtered))
+    if dropped:
+        log.info("Quality filter: %d non-binary dropped, %d passed", dropped, len(filtered))
     return filtered
     """Fetch full details for one market, including resolution history."""
     data = _get(f"/markets/{market_id}")

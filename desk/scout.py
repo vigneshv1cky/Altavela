@@ -22,7 +22,9 @@ _SYSTEM = (
     "  • CALENDAR: event approaching resolution, market hasn't caught up\n"
     "  • MOMENTUM: strong price trend or whale activity suggesting a move\n\n"
     "For each pick, give a one-sentence reason. For each SKIP, also give a reason.\n"
-    "Prefer HIGH VOLUME, HIGH LIQUIDITY markets.\n\n"
+    "Prefer HIGH VOLUME, HIGH LIQUIDITY markets.\n"
+    "Near-expiry markets (<1h): only pick if you see a clear last-minute mispricing.\n"
+    "Extreme prices (<5¢ or >95¢): the edge is tiny — pick only if strongly confident.\n\n"
     "edge_hint: MISPRICING | INFORMATION | CALENDAR | MOMENTUM\n\n"
     'Return ONLY JSON: {{"picks": [{{"market_id": "...", "question": "...", '
     '"edge_hint": "MISPRICING|INFORMATION|CALENDAR|MOMENTUM", "direction": '
