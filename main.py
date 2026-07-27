@@ -223,7 +223,7 @@ async def _desk() -> None:
         # Gather real-world evidence for the researcher
         loop = asyncio.get_running_loop()
         evidence = await loop.run_in_executor(
-            None, gather_evidence, pick["question"], market.get("tags"))
+            None, gather_evidence, pick["question"], market)
 
         log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
         async for ev in _debate_one(market, pick, evidence):

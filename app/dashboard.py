@@ -142,7 +142,7 @@ def create_app() -> FastAPI:
                 yield _ev("debate_start", question=pick["question"], edge_hint=pick.get("edge_hint"))
 
                 evidence = await loop.run_in_executor(
-                    None, gather_evidence, pick["question"], market.get("tags"))
+                    None, gather_evidence, pick["question"], market)
                 if evidence:
                     yield _ev("evidence", msg=f"{len(evidence)} articles found for '{pick['question'][:60]}'")
 
