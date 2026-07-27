@@ -162,32 +162,36 @@ export default function App() {
 
             {/* Debate feed */}
             {feed.length > 0 && (() => {
-              const groups: { start?: Ev; items: Ev[] }[] = []
+              const groups: { question: string; items: Ev[] }[] = []
               let cur: Ev[] = []
               for (const ev of feed) {
                 if (ev.type === "debate_start") {
-                  if (cur.length > 0) groups.push({ items: cur })
+                  if (cur.length > 0) groups.push({ question: groups.length > 0 ? groups[groups.length-1].question : cur[0]?.question ?? "", items: cur })
                   cur = [ev]
                 } else {
                   cur.push(ev)
                 }
               }
-              if (cur.length > 0) groups.push({ items: cur })
+              // Use the last debate_start's question as the group label
+              if (cur.length > 0) {
+                const lastStart = [...cur].reverse().find(e => e.type === "debate_start")
+                groups.push({ question: lastStart?.question ?? "", items: cur })
+              }
 
               return (
                 <>
                   <div className="text-zinc-500 mb-1 text-[13px]">── Live Feed ──</div>
                   {groups.map((g, gi) => (
                     <div key={gi}>
+                      {gi > 0 && <div className="border-t border-zinc-800 my-2" />}
                       {g.items[0]?.type === "debate_start" && (
                         <TermLine ev={g.items[0]} />
                       )}
-                      {g.items.slice(g.items[0]?.type === "debate_start" ? 1 : 0).map((ev, ei) => (
-                        <div key={ei} className="border-l border-zinc-800 ml-1.5 pl-2.5">
-                          <TermLine ev={ev} />
-                        </div>
-                      ))}
-                      {gi < groups.length - 1 && <div className="border-t border-zinc-800 my-1" />}
+                      <div className="border-l border-zinc-800 ml-1.5 pl-2.5 space-y-0.5">
+                        {g.items.slice(g.items[0]?.type === "debate_start" ? 1 : 0).map((ev, ei) => (
+                          <TermLine key={ei} ev={ev} />
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </>
