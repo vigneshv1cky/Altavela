@@ -82,6 +82,18 @@ def create_app() -> FastAPI:
             })
         return result
 
+    @app.get("/api/timelines")
+    async def api_timelines():
+        """All picks with outcomes — for the track record."""
+        rows = store.all_picks(limit=50)
+        return rows
+
+    @app.get("/api/tokens")
+    async def api_tokens():
+        """Token usage summary."""
+        result = store.token_summary()
+        return result
+
     @app.get("/api/find-markets")
     async def sse_find_markets(request: Request):
         """SSE endpoint — runs the full pipeline and streams events live."""

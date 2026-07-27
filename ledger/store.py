@@ -232,6 +232,28 @@ def markets_debated_since(hours: float) -> dict[str, dict]:
     return out
 
 
+def all_picks(limit: int = 50) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, ts, question, direction, adjusted_score, confidence, "
+            "resolved, outcome, market_yes_price, thesis, verdict, approved "
+            "FROM picks WHERE arm='TEAM' ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def token_summary() -> dict:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT role, model, SUM(input_tok) as inp, SUM(output_tok) as out "
+            "FROM token_usage GROUP BY role, model ORDER BY role"
+        ).fetchall()
+    total = sum(r["inp"] + r["out"] for r in rows)
+    return {"usage": [{"role": r["role"], "model": r["model"],
+                       "input_tok": r["inp"], "output_tok": r["out"]}
+                      for r in rows], "total_tokens": total}
+
+
 # ---------------------------------------------------------------------------
 # Token sink
 # ---------------------------------------------------------------------------
