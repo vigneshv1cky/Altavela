@@ -2,14 +2,19 @@
 
 import json as _json
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import StreamingResponse
 
 from altavela.ledger import store
 
 log = logging.getLogger("altavela.dashboard")
+
+_STATIC = Path(__file__).resolve().parent.parent / "app" / "static"
 
 
 def create_app() -> FastAPI:
@@ -75,49 +80,90 @@ def create_app() -> FastAPI:
             })
         return result
 
-    @app.get("/", response_class=HTMLResponse)
-    async def index():
-        return """
-        <!doctype html>
-        <html><head><title>Altavela</title>
-        <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>
-          body { font-family: system-ui; margin: 2rem; background: #0a0a0a; color: #e4e4e7; }
-          h1 { font-size: 1.25rem; }
-          .stats { display: flex; gap: 2rem; margin: 1rem 0; }
-          .stat { font-size: 2rem; font-weight: bold; }
-          .label { font-size: 0.75rem; color: #71717a; }
-          table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-          th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #27272a; }
-        </style></head>
-        <body>
-          <h1>Altavela — Prediction Markets</h1>
-          <div class="stats" id="stats"></div>
-          <table id="picks"><thead><tr>
-            <th>ID</th><th>Question</th><th>Direction</th><th>Entry</th><th>Current</th><th>P&L</th>
-          </tr></thead><tbody></tbody></table>
-          <script>
-            async function load() {
-              const s = await fetch('/api/stats').then(r=>r.json());
-              document.getElementById('stats').innerHTML =
-                '<div><div class="stat">'+s.total_picks+'</div><div class="label">Picks</div></div>'+
-                '<div><div class="stat">'+s.resolved+'</div><div class="label">Resolved</div></div>'+
-                '<div><div class="stat">'+(s.win_rate!=null?s.win_rate+'%':'—')+'</div><div class="label">Win Rate</div></div>';
-              const picks = await fetch('/api/picks').then(r=>r.json());
-              const tbody = document.querySelector('#picks tbody');
-              picks.forEach(p => {
-                const pnl = p.pnl_pct != null ? (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct + '%' : '—';
-                const color = p.pnl_pct != null ? (p.pnl_pct >= 0 ? 'color:#4ade80' : 'color:#f87171') : '';
-                const tr = document.createElement('tr');
-                tr.innerHTML = '<td>#'+p.id+'</td><td>'+(p.question||'').slice(0,80)+'</td>'+
-                  '<td>'+p.direction+'</td><td>'+(p.entry_price||'—')+'</td><td>'+(p.current_price||'—')+'</td>'+
-                  '<td style="'+color+'">'+pnl+'</td>';
-                tbody.appendChild(tr);
-              });
-            }
-            load();
-            setInterval(load, 60000);
-          </script>
-        </body></html>"""
+    @app.get("/api/find-markets")
+    async def sse_find_markets(request: Request):
+        """SSE endpoint — runs the full pipeline and streams events live."""
+        import asyncio
+
+        async def stream():
+            from altavela.ingest.polymarket import fetch_markets, quality_filter
+            from altavela.ingest.evidence import gather_evidence
+            from altavela.desk.scout import run_scout as scout_run
+            from altavela.desk.debate import deliberate
+            from altavela.config import REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT
+
+            loop = asyncio.get_running_loop()
+
+            def _ev(t, **kw):
+                d = {"type": t, **kw}
+                return f"data: {_json.dumps(d, default=str)}\n\n"
+
+            yield _ev("status", msg="Fetching active prediction markets…")
+            markets = await loop.run_in_executor(None, lambda: fetch_markets(limit=50, min_volume=5000))
+            if not markets:
+                yield _ev("done", msg="No active markets found")
+                return
+
+            markets = await loop.run_in_executor(None, quality_filter, markets)
+            if not markets:
+                yield _ev("done", msg="No markets passed quality filter")
+                return
+
+            # Cooldown filter
+            recent = await loop.run_in_executor(None, lambda: store.markets_debated_since(REPICK_COOLDOWN_HOURS))
+            fresh_markets = []
+            for m in markets:
+                mid = m.get("id", "")
+                if mid in recent:
+                    prev = recent[mid]
+                    prices = m.get("prices", [0.5, 0.5])
+                    cur_yes = prices[0] if len(prices) > 0 else 0.5
+                    prev_yes = prev.get("yes_price") or 0.5
+                    if prev_yes > 0 and abs(cur_yes - prev_yes) / prev_yes * 100 < REPICK_MIN_PRICE_MOVE_PCT:
+                        continue
+                fresh_markets.append(m)
+
+            yield _ev("status", msg=f"Scout scanning {len(fresh_markets)} markets…")
+            result = await loop.run_in_executor(None, scout_run, fresh_markets)
+            picks = result.get("picks", [])
+
+            if not picks:
+                yield _ev("done", msg=f"No picks — {len(result.get('skips',[]))} skipped")
+                return
+
+            for pick in picks:
+                mid = pick["market_id"]
+                market = next((m for m in fresh_markets if m["id"] == mid), {})
+                if not market:
+                    continue
+
+                yield _ev("debate_start", question=pick["question"], edge_hint=pick.get("edge_hint"))
+
+                evidence = await loop.run_in_executor(
+                    None, gather_evidence, pick["question"], market.get("tags"))
+                if evidence:
+                    yield _ev("evidence", msg=f"{len(evidence)} articles found for '{pick['question'][:60]}'")
+
+                yield _ev("scout_pick", question=pick["question"], direction=pick["direction"],
+                          edge_hint=pick.get("edge_hint"), reason=pick.get("reason"))
+
+                async for ev_data in deliberate(market, pick, evidence, "STREAM", None):
+                    t = ev_data.get("type", "")
+                    if t != "_result":
+                        yield _ev(t, **{k: v for k, v in ev_data.items() if k != "type"})
+
+            await loop.run_in_executor(None, lambda: store.add_run("STREAM"))
+            yield _ev("done", msg=f"{len(picks)} debated")
+
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache",
+                                          "X-Accel-Buffering": "no"})
+
+    if _STATIC.exists() and (_STATIC / "index.html").exists():
+        app.mount("/", StaticFiles(directory=str(_STATIC), html=True), name="static")
+    else:
+        @app.get("/", response_class=HTMLResponse)
+        async def index():
+            return "<html><body style='background:#0a0a0a;color:#e4e4e7;font-family:system-ui;padding:2rem'><h1>Altavela</h1><p>API running. Build the UI with <code>cd altavela/ui && pnpm build</code></p></body></html>"
 
     return app
