@@ -80,7 +80,78 @@ async def _serve() -> None:
     import uvicorn
     config = uvicorn.Config(app, host=host, port=DASHBOARD_PORT, log_level="info")
     server = uvicorn.Server(config)
-    await asyncio.gather(_grader_loop(), _autorun_loop(), server.serve())
+    await asyncio.gather(_grader_loop(), _autorun_loop(), _watcher_loop(), server.serve())
+
+
+async def _watcher_loop():
+    """Watch open positions — exit when price reaches the researcher's estimated
+    fair value (target) or falls past the stop-loss threshold."""
+    from altavela.ingest.polymarket import live_prices
+    from altavela.ledger import store
+
+    loop = asyncio.get_running_loop()
+    log_w = logging.getLogger("altavela.watch")
+
+    while True:
+        try:
+            picks = await loop.run_in_executor(None, store.live_picks)
+            if picks:
+                mids = list({p["market_id"] for p in picks if p.get("market_id")})
+                prices = await loop.run_in_executor(None, live_prices, mids) if mids else {}
+
+                for p in picks:
+                    mid = p.get("market_id", "")
+                    if mid not in prices:
+                        continue
+
+                    direction = p.get("direction", "")
+                    yes_px, no_px = prices[mid]
+                    entry = p.get("market_yes_price") if direction == "BUY_YES" else p.get("market_no_price")
+                    est_prob = p.get("est_probability") or 0.5
+
+                    if not entry or entry <= 0:
+                        continue
+
+                    # Target = researcher's estimated fair value
+                    # Stop = entry - max(entry * 0.25, 0.03) — 25% or 3 cents max loss
+                    if direction == "BUY_YES":
+                        target = min(est_prob, 0.99)
+                        cur = yes_px
+                    else:
+                        target = min(1.0 - est_prob, 0.99)
+                        cur = no_px
+
+                    stop = max(entry - max(entry * 0.25, 0.03), 0.01)
+                    # Sanity: stop must be below entry and target must be above entry
+                    if stop >= entry or target <= entry:
+                        continue
+
+                    reason = None
+                    exit_px = None
+                    if cur >= target:
+                        reason = f"target hit: price {cur} reached est fair value {target}"
+                        exit_px = cur
+                    elif cur <= stop:
+                        reason = f"stopped out: price {cur} fell below stop {stop}"
+                        exit_px = cur
+
+                    if reason:
+                        # P&L: return = (exit - entry) / entry for BUY_YES
+                        # For BUY_NO: return = (entry - exit) / entry (profit when NO price goes up)
+                        if direction == "BUY_YES":
+                            pnl = (exit_px - entry) / entry * 100
+                        else:
+                            pnl = (entry - exit_px) / entry * 100
+
+                        await loop.run_in_executor(
+                            None, lambda pid=p["id"], r=reason, px=exit_px:
+                            store.record_exit(pid, r, px))
+                        log_w.info("Exit #%d %s %s: %s (pnl %+.1f%%)",
+                                   p["id"], direction, p.get("question", "?")[:50],
+                                   reason, pnl)
+        except Exception as exc:
+            log_w.error("watcher error: %s", exc)
+        await asyncio.sleep(120)   # check every 2 min
 
 
 async def _desk() -> None:

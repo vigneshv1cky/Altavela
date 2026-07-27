@@ -151,3 +151,23 @@ def market_detail(market_id: str) -> dict | None:
     if isinstance(data, dict) and data.get("id"):
         return data
     return None
+
+
+def live_prices(market_ids: list[str]) -> dict[str, tuple[float, float]]:
+    """Get current (YES, NO) prices for one or more markets. Returns {id: (yes_px, no_px)}.
+    Uses the single-market endpoint for the freshest prices. Best-effort — missing
+    markets are omitted."""
+    out: dict[str, tuple[float, float]] = {}
+    for mid in market_ids:
+        data = market_detail(str(mid))
+        if not data or data.get("closed"):
+            continue
+        prices_raw = _parse_json_field(data, "outcomePrices")
+        if len(prices_raw) >= 2:
+            try:
+                yes = round(float(prices_raw[0]), 4)
+                no = round(float(prices_raw[1]), 4)
+                out[str(mid)] = (yes, no)
+            except (ValueError, TypeError):
+                pass
+    return out

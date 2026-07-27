@@ -45,19 +45,35 @@ def create_app() -> FastAPI:
 
     @app.get("/api/picks")
     async def api_picks():
+        from altavela.ingest.polymarket import live_prices as pm_prices
+
         picks = store.live_picks()
-        return [
-            {
+        mids = list({p["market_id"] for p in picks if p.get("market_id")})
+        prices = pm_prices(mids) if mids else {}
+
+        result = []
+        for p in picks:
+            mid = p.get("market_id", "")
+            yes_px, no_px = prices.get(mid, (None, None))
+            direction = p.get("direction", "")
+            entry = p.get("market_yes_price") if direction == "BUY_YES" else p.get("market_no_price")
+            cur = yes_px if direction == "BUY_YES" else no_px
+            pnl_pct = None
+            if entry and cur and entry > 0:
+                pnl_pct = round((cur - entry) / entry * 100, 1) if direction == "BUY_YES" else round((entry - cur) / entry * 100, 1)
+
+            result.append({
                 "id": p["id"],
-                "question": p.get("question", ""),
-                "direction": p.get("direction", ""),
+                "question": (p.get("question") or "")[:100],
+                "direction": direction,
                 "score": p.get("adjusted_score") or p.get("score"),
-                "market_yes_price": p.get("market_yes_price"),
+                "entry_price": entry,
+                "current_price": cur,
+                "pnl_pct": pnl_pct,
                 "resolved": bool(p.get("resolved")),
                 "outcome": p.get("outcome"),
-            }
-            for p in picks
-        ]
+            })
+        return result
 
     @app.get("/", response_class=HTMLResponse)
     async def index():
@@ -78,7 +94,7 @@ def create_app() -> FastAPI:
           <h1>Altavela — Prediction Markets</h1>
           <div class="stats" id="stats"></div>
           <table id="picks"><thead><tr>
-            <th>ID</th><th>Question</th><th>Direction</th><th>Score</th><th>Price</th>
+            <th>ID</th><th>Question</th><th>Direction</th><th>Entry</th><th>Current</th><th>P&L</th>
           </tr></thead><tbody></tbody></table>
           <script>
             async function load() {
@@ -90,13 +106,17 @@ def create_app() -> FastAPI:
               const picks = await fetch('/api/picks').then(r=>r.json());
               const tbody = document.querySelector('#picks tbody');
               picks.forEach(p => {
+                const pnl = p.pnl_pct != null ? (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct + '%' : '—';
+                const color = p.pnl_pct != null ? (p.pnl_pct >= 0 ? 'color:#4ade80' : 'color:#f87171') : '';
                 const tr = document.createElement('tr');
-                tr.innerHTML = '<td>#'+p.id+'</td><td>'+p.question.slice(0,80)+'</td>'+
-                  '<td>'+p.direction+'</td><td>'+p.score+'</td><td>'+p.market_yes_price+'</td>';
+                tr.innerHTML = '<td>#'+p.id+'</td><td>'+(p.question||'').slice(0,80)+'</td>'+
+                  '<td>'+p.direction+'</td><td>'+(p.entry_price||'—')+'</td><td>'+(p.current_price||'—')+'</td>'+
+                  '<td style="'+color+'">'+pnl+'</td>';
                 tbody.appendChild(tr);
               });
             }
             load();
+            setInterval(load, 60000);
           </script>
         </body></html>"""
 
