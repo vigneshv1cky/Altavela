@@ -85,10 +85,6 @@ export default function App() {
   const esRef = useRef<EventSource | null>(null)
   const termRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
-    if (termRef.current) termRef.current.scrollTop = termRef.current.scrollHeight
-  }, [feed])
-
   async function refresh() {
     const s = await fetch("/api/stats").then(r => r.json())
     setStats(s)
