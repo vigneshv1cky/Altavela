@@ -227,11 +227,27 @@ def stats() -> dict:
         wins = conn.execute(
             "SELECT COUNT(*) as n FROM picks WHERE arm='TEAM' AND resolved=1 AND outcome=1.0"
         ).fetchone()
+        # Include exited positions in performance — exit PnL > 0 = win
+        exit_win = conn.execute(
+            "SELECT COUNT(*) as n FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL AND resolved=0"
+            " AND ((direction='BUY_YES' AND exit_price > market_yes_price)"
+            "  OR  (direction='BUY_NO'  AND exit_price > market_no_price))"
+        ).fetchone()
+        exit_loss = conn.execute(
+            "SELECT COUNT(*) as n FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL AND resolved=0"
+            " AND ((direction='BUY_YES' AND exit_price <= market_yes_price)"
+            "  OR  (direction='BUY_NO'  AND exit_price <= market_no_price))"
+        ).fetchone()
+        closed = resolved["n"] + exit_win["n"] + exit_loss["n"]
+        w = wins["n"] + exit_win["n"]
     return {
         "total_picks": total["n"],
         "resolved": resolved["n"],
         "wins": wins["n"],
         "win_rate": round(wins["n"] / resolved["n"] * 100, 1) if resolved["n"] > 0 else None,
+        "closed": closed,
+        "closed_wins": w,
+        "closed_win_rate": round(w / closed * 100, 1) if closed > 0 else None,
     }
 
 

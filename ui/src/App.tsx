@@ -9,7 +9,7 @@ interface Pick {
   id: number; ts: string; question: string; direction: string; score: number
   entry_price: number | null; current_price: number | null; pnl_pct: number | null
 }
-interface Stats { total_picks: number; resolved: number; wins: number; win_rate: number | null }
+interface Stats { total_picks: number; resolved: number; wins: number; win_rate: number | null; closed: number; closed_wins: number; closed_win_rate: number | null }
 interface TimelineRow { id: number; ts: string; direction: string; question: string; resolved: number; outcome: number | null; adjusted_score: number; verdict: string; pnl_return_pct: number | null; exit_ts: string | null; exit_reason: string | null; exit_price: number | null; market_yes_price: number | null; market_no_price: number | null }
 interface TokenRow { role: string; model: string; input_tok: number; output_tok: number }
 
@@ -30,7 +30,7 @@ function LiveCard({ p, onSelect }: { p: Pick; onSelect: (id: number) => void }) 
       <div className="text-sm line-clamp-2">{p.question}</div>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>entry {p.entry_price ?? "—"}{p.current_price != null && p.entry_price ? ` · now ${p.current_price}` : ""}</span>
-        <span>conf {p.score}</span>
+        <span>{new Date(p.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
       </div>
     </Card>
   )
@@ -48,7 +48,7 @@ function groupByDate<T extends { ts?: string }>(items: T[]): { label: string; it
 
 export default function App() {
   const [running, setRunning] = useState(false)
-  const [stats, setStats] = useState<Stats>({ total_picks: 0, resolved: 0, wins: 0, win_rate: null })
+  const [stats, setStats] = useState<Stats>({ total_picks: 0, resolved: 0, wins: 0, win_rate: null, closed: 0, closed_wins: 0, closed_win_rate: null })
   const [positions, setPositions] = useState<Pick[]>([])
   const [timeline, setTimeline] = useState<TimelineRow[]>([])
   const [tokens, setTokens] = useState<{ usage: TokenRow[]; total_tokens: number }>({ usage: [], total_tokens: 0 })
@@ -85,7 +85,7 @@ export default function App() {
     es.onerror = () => { setRunning(false); es.close() }
   }
 
-  const winRate = stats.win_rate
+  const winRate = stats.closed_win_rate
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -96,8 +96,8 @@ export default function App() {
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden text-right sm:flex sm:gap-4 text-xs text-muted-foreground">
               <div><div className="font-mono font-semibold">{stats.total_picks}</div><div className="text-[10px] uppercase">picks</div></div>
-              <div><div className="font-mono font-semibold">{stats.resolved}</div><div className="text-[10px] uppercase">resolved</div></div>
-              <div><div className={`font-mono font-semibold ${winRate != null && winRate > 50 ? "text-emerald-500" : ""}`}>{winRate != null ? `${winRate}%` : "—"}</div><div className="text-[10px] uppercase">win rate</div></div>
+              <div><div className="font-mono font-semibold">{stats.closed}</div><div className="text-[10px] uppercase">closed</div></div>
+              <div><div className={`font-mono font-semibold ${winRate != null && winRate > 50 ? "text-emerald-500" : winRate != null ? "text-red-500" : ""}`}>{winRate != null ? `${winRate}%` : "—"}</div><div className="text-[10px] uppercase">win rate</div></div>
             </div>
             <Button onClick={run} disabled={running} size="default" variant="default" className="gap-1.5">{running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}{running ? "Scanning…" : "Find Markets"}</Button>
             <button onClick={toggleTheme} aria-label="Toggle theme" title={theme === "dark" ? "Dark" : theme === "light" ? "Light" : "System"} className="grid h-8 w-8 place-items-center rounded-md border text-muted-foreground transition-colors hover:text-foreground">{theme === "dark" ? <Moon className="h-4 w-4" /> : theme === "light" ? <Sun className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}</button>
@@ -113,8 +113,8 @@ export default function App() {
                 <TabsTrigger value="track" className="px-3 text-sm data-active:bg-indigo-600 data-active:text-white">History</TabsTrigger>
                 <TabsTrigger value="tokens" className="px-3 text-sm data-active:bg-indigo-600 data-active:text-white">Usage</TabsTrigger>
               </TabsList>
-              <TabsContent value="live">{positions.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No open positions</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{positions.length} open</div>{groupByDate(positions).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(p => <LiveCard key={p.id} p={p} onSelect={setSelected} />)}</div></div>)}</div>}</TabsContent>
-              <TabsContent value="track">{timeline.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No picks yet</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{timeline.filter(t => t.resolved).length} resolved · {timeline.length} total</div>{groupByDate(timeline).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(t => {
+              <TabsContent value="live">{positions.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No open positions</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{positions.length} open</div>{groupByDate([...positions].sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(p => <LiveCard key={p.id} p={p} onSelect={setSelected} />)}</div></div>)}</div>}</TabsContent>
+              <TabsContent value="track">{timeline.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No picks yet</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{timeline.filter(t => t.resolved).length} resolved · {timeline.length} total</div>{groupByDate([...timeline].sort((a, b) => (b.exit_ts || "").localeCompare(a.exit_ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(t => {
                   const exited = !!t.exit_ts
                   const entry = t.direction === "BUY_YES" ? t.market_yes_price : t.market_no_price
                   const exitPnl = (exited && t.exit_price != null && entry && entry > 0)
@@ -136,7 +136,7 @@ export default function App() {
                     </div>
                     <div className="text-sm line-clamp-2">{t.question}</div>
                     <div className="text-[11px] text-muted-foreground flex justify-between gap-2">
-                      <span className="truncate">conf {(t.adjusted_score ?? 0).toFixed(0)} · {t.verdict}{exited && !t.resolved ? ` · exit: ${t.exit_price}` : ""}</span>
+                      <span className="truncate">{new Date(t.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}{exited ? ` → ${new Date(t.exit_ts!).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
                       {pnl != null && <span className={`shrink-0 ${pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>{pnl >= 0 ? "+" : ""}{pnl.toFixed(1)}%</span>}
                     </div>
                   </Card>
