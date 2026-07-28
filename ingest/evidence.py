@@ -4,6 +4,7 @@ Sources (all free, no API keys):
   - Google News RSS — recent articles matching the market question
   - Wikipedia API — factual background on the topic
   - Polymarket metadata — market description, resolution source, category
+  - Sports-specific — recent form, head-to-head, betting odds/previews
 
 Follows the AlphaDesk pattern: code fetches facts, agents interpret them.
 """
@@ -16,6 +17,15 @@ import urllib.parse
 import urllib.request
 
 log = logging.getLogger("altavela.evidence")
+
+_SPORTS_TERMS = re.compile(
+    r"\b(vs|versus|win|lose|draw|match|game|tournament|championship|league"
+    r"|final|semi.?final|quarter.?final|playoff|series|season"
+    r"|spread|home|away|over/under|o/u|score|goal|point|set\b"
+    r"|nfl|nba|mlb|nhl|mls|epl|la.?liga|serie.?a|bundesliga|ligue.?1"
+    r"|ufc|wwe|f1|nascar|boxing|mma|cricket|rugby"
+    r"|counter.?strike|lol|dota|valorant|overwatch|esports"
+    r"|itf|atp|wta|grand.?slam|open\b)", re.IGNORECASE)
 
 
 def _search_news(query: str, max_results: int = 6) -> list[str]:
@@ -128,6 +138,19 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
             articles = _search_news(" ".join(tags[:3]))
             for a in articles:
                 evidence.append(f"[NEWS] {a}")
+
+    # 5. Sports-specific: recent form, H2H, odds/previews
+    if _SPORTS_TERMS.search(question):
+        tags_str = " ".join(market.get("tags", [])[:2]) if market else ""
+        base = f"{question[:120]} {tags_str}".strip()
+        for suffix, label in [
+            ("recent results form last 5 matches", "[FORM]"),
+            ("head to head record history", "[H2H]"),
+            ("betting odds prediction preview", "[ODDS]"),
+        ]:
+            query = f"{base} {suffix}"[:250]
+            for a in _search_news(query, max_results=3):
+                evidence.append(f"{label} {a}")
 
     if evidence:
         log.info("Evidence: %d items for '%s'", len(evidence), question[:60])
