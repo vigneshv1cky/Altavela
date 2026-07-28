@@ -9,7 +9,7 @@ interface Pick {
   id: number; ts: string; question: string; direction: string; score: number
   entry_price: number | null; current_price: number | null; pnl_pct: number | null
 }
-interface Stats { total_picks: number; resolved: number; wins: number; win_rate: number | null; closed: number; closed_wins: number; closed_win_rate: number | null; total_pnl_pct: number }
+interface Stats { total_picks: number; resolved: number; wins: number; win_rate: number | null; closed: number; closed_wins: number; closed_win_rate: number | null; total_pnl_pct: number; median_pnl_pct: number }
 interface TimelineRow { id: number; ts: string; direction: string; question: string; resolved: number; outcome: number | null; adjusted_score: number; verdict: string; pnl_return_pct: number | null; exit_ts: string | null; exit_reason: string | null; exit_price: number | null; market_yes_price: number | null; market_no_price: number | null }
 interface TokenRow { role: string; model: string; input_tok: number; output_tok: number }
 
@@ -48,7 +48,7 @@ function groupByDate<T extends { ts?: string }>(items: T[]): { label: string; it
 
 export default function App() {
   const [running, setRunning] = useState(false)
-  const [stats, setStats] = useState<Stats>({ total_picks: 0, resolved: 0, wins: 0, win_rate: null, closed: 0, closed_wins: 0, closed_win_rate: null, total_pnl_pct: 0 })
+  const [stats, setStats] = useState<Stats>({ total_picks: 0, resolved: 0, wins: 0, win_rate: null, closed: 0, closed_wins: 0, closed_win_rate: null, total_pnl_pct: 0, median_pnl_pct: 0 })
   const [positions, setPositions] = useState<Pick[]>([])
   const [timeline, setTimeline] = useState<TimelineRow[]>([])
   const [tokens, setTokens] = useState<{ usage: TokenRow[]; total_tokens: number }>({ usage: [], total_tokens: 0 })
@@ -114,7 +114,7 @@ export default function App() {
                 <TabsTrigger value="tokens" className="px-3 text-sm data-active:bg-indigo-600 data-active:text-white">Usage</TabsTrigger>
               </TabsList>
               <TabsContent value="live">{positions.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No open positions</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{positions.length} open</div>{groupByDate([...positions].sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(p => <LiveCard key={p.id} p={p} onSelect={setSelected} />)}</div></div>)}</div>}</TabsContent>
-              <TabsContent value="track">{timeline.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No picks yet</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{timeline.filter(t => t.resolved).length} resolved · {timeline.length} total · P&L <span className={stats.total_pnl_pct >= 0 ? "text-emerald-500" : "text-red-500"}>{stats.total_pnl_pct >= 0 ? "+" : ""}{stats.total_pnl_pct}%</span></div>{groupByDate([...timeline].sort((a, b) => (b.exit_ts || "").localeCompare(a.exit_ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(t => {
+              <TabsContent value="track">{timeline.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No picks yet</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{timeline.filter(t => t.resolved).length} resolved · {timeline.length} total</div><Card className={`flex items-center justify-between p-3 ${stats.total_pnl_pct >= 0 ? "border-emerald-500/30" : "border-red-500/30"}`}><span className="text-xs text-muted-foreground">Overall P&amp;L</span><div className="text-right"><span className={`font-mono text-lg font-bold tabular-nums ${stats.total_pnl_pct >= 0 ? "text-emerald-500" : "text-red-500"}`}>{stats.total_pnl_pct >= 0 ? "+" : ""}{stats.total_pnl_pct}%</span><div className="text-[10px] text-muted-foreground">median <span className={stats.median_pnl_pct >= 0 ? "text-emerald-500" : "text-red-500"}>{stats.median_pnl_pct >= 0 ? "+" : ""}{stats.median_pnl_pct}%</span></div></div></Card>{groupByDate([...timeline].sort((a, b) => (b.exit_ts || "").localeCompare(a.exit_ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(t => {
                   const exited = !!t.exit_ts
                   const entry = t.direction === "BUY_YES" ? t.market_yes_price : t.market_no_price
                   const exitPnl = (exited && t.exit_price != null && entry && entry > 0)

@@ -247,6 +247,22 @@ def stats() -> dict:
             " ELSE (exit_price - market_no_price) / market_no_price * 100 END), 0) as total_pnl"
             " FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL"
         ).fetchone()
+        # Median P&L — less sensitive to outliers than sum/avg
+        median_pnl = conn.execute(
+            "SELECT CASE WHEN direction='BUY_YES'"
+            " THEN (exit_price - market_yes_price) / market_yes_price * 100"
+            " ELSE (exit_price - market_no_price) / market_no_price * 100 END as pnl"
+            " FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL"
+            " ORDER BY pnl"
+        ).fetchall()
+        median = 0.0
+        if median_pnl:
+            vals = [r[0] for r in median_pnl]
+            n = len(vals)
+            if n % 2 == 1:
+                median = vals[n // 2]
+            else:
+                median = (vals[n // 2 - 1] + vals[n // 2]) / 2
     return {
         "total_picks": total["n"],
         "resolved": resolved["n"],
@@ -256,6 +272,7 @@ def stats() -> dict:
         "closed_wins": w,
         "closed_win_rate": round(w / closed * 100, 1) if closed > 0 else None,
         "total_pnl_pct": round(pnl["total_pnl"], 1),
+        "median_pnl_pct": round(median, 1),
     }
 
 
