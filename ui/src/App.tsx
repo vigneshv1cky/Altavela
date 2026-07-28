@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowDown, ArrowUp, Loader2, X } from "lucide-react"
+import { useTheme, type Theme } from "@/lib/theme"
+import { ArrowDown, ArrowUp, Loader2, Moon, Monitor, Sun, X } from "lucide-react"
 
 interface Ev {
   type: string; msg?: string; market_id?: string; question?: string; direction?: string
@@ -105,6 +106,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false)
 
   const [selected, setSelected] = useState<number | null>(null)
+  const [theme, toggleTheme] = useTheme()
 
   async function refresh() {
     const s = await fetch("/api/stats").then(r => r.json()); setStats(s)
@@ -146,10 +148,20 @@ export default function App() {
             <div><div className="font-semibold">{stats.resolved}</div><div className="text-[10px]">resolved</div></div>
             <div><div className={`font-semibold ${winRate != null && winRate > 50 ? "text-emerald-400" : ""}`}>{winRate != null ? `${winRate}%` : "—"}</div><div className="text-[10px]">win rate</div></div>
           </div>
-          <Button onClick={run} disabled={running} size="sm" className="gap-1.5">
-            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            {running ? "Scanning…" : "Find Markets"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={run} disabled={running} size="sm" className="gap-1.5">
+              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {running ? "Scanning…" : "Find Markets"}
+            </Button>
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              title={theme === "dark" ? "Dark" : theme === "light" ? "Light" : "System"}
+              className="grid h-8 w-8 place-items-center rounded-md border border-zinc-200 dark:border-zinc-700 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {theme === "dark" ? <Moon className="h-4 w-4" /> : theme === "light" ? <Sun className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
       </header>
 
