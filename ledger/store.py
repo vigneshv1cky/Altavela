@@ -240,6 +240,13 @@ def stats() -> dict:
         ).fetchone()
         closed = resolved["n"] + exit_win["n"] + exit_loss["n"]
         w = wins["n"] + exit_win["n"]
+        # Total P&L across all closed positions (exited + resolved)
+        pnl = conn.execute(
+            "SELECT COALESCE(SUM(CASE WHEN direction='BUY_YES'"
+            " THEN (exit_price - market_yes_price) / market_yes_price * 100"
+            " ELSE (exit_price - market_no_price) / market_no_price * 100 END), 0) as total_pnl"
+            " FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL"
+        ).fetchone()
     return {
         "total_picks": total["n"],
         "resolved": resolved["n"],
@@ -248,6 +255,7 @@ def stats() -> dict:
         "closed": closed,
         "closed_wins": w,
         "closed_win_rate": round(w / closed * 100, 1) if closed > 0 else None,
+        "total_pnl_pct": round(pnl["total_pnl"], 1),
     }
 
 
