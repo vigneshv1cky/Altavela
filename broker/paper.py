@@ -1,8 +1,12 @@
-"""Paper trading broker — simulates Polymarket CLOB fills locally.
+"""Paper broker — simulated Polymarket CLOB execution for research tracking.
 
-Records paper positions with sizing, enforces limits, tracks fills."""
+Enabled with PAPER_TRADING=1. Does NOT place real on-chain orders.
+Sizes positions by conviction, enforces position/concentration limits,
+and records simulated fills in the ledger.
+"""
 
 import logging
+import uuid
 from datetime import datetime, timezone
 
 from altavela.config import (
@@ -16,75 +20,117 @@ from altavela.ledger import store
 
 log = logging.getLogger("altavela.broker")
 
+_CATEGORY_KEYWORDS = {
+    "sports": ["sports", "nfl", "nba", "mlb", "nhl", "soccer", "tennis", "football",
+               "basketball", "baseball", "boxing", "mma", "ufc", "cricket", "rugby",
+               "league", "championship", "tournament", "grand prix", "f1", "nascar",
+               "esports", "counter-strike", "lol", "dota", "valorant", "itf", "atp", "wta"],
+    "crypto": ["bitcoin", "ethereum", "btc", "eth", "crypto", "solana", "xrp",
+               "blockchain", "defi", "nft", "token"],
+    "politics": ["trump", "biden", "democrat", "republican", "election", "senate",
+                 "congress", "president", "governor", "vote", "political", "gop",
+                 "democratic", "republicans", "democrats", "gaza", "israel", "iran",
+                 "ukraine", "russia", "china", "tariff", "sanction"],
+    "finance": ["s&p", "spy", "nasdaq", "dow", "stock", "gdp", "inflation", "fed",
+                "rate", "bond", "yield", "gold", "xauusd", "oil", "commodity",
+                "treasury", "dollar", "eurusd", "forex"],
+    "entertainment": ["movie", "oscar", "film", "box office", "music", "album",
+                      "artist", "grammy", "emmy", "tv", "show", "netflix", "disney",
+                      "celebrity", "award", "concert", "tour"],
+    "weather": ["temperature", "weather", "heat", "cold", "rain", "storm",
+                "hurricane", "tornado", "climate"],
+}
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+
+def _detect_category(market: dict) -> str:
+    question = (market.get("question") or "").lower()
+    tags = [t.lower() for t in (market.get("tags") or [])]
+    combined = question + " " + " ".join(tags)
+
+    for cat, keywords in _CATEGORY_KEYWORDS.items():
+        for kw in keywords:
+            if kw in combined:
+                return cat
+    return "other"
 
 
-def _category_positions(category: str) -> int:
-    """Count open positions in the same category."""
-    if not category:
-        return 0
-    picks = store.live_picks()
-    count = 0
+def _current_positions() -> list[dict]:
+    with store._connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM picks WHERE arm='TEAM' AND taken=1 AND exit_ts IS NULL"
+            " AND resolved=0 ORDER BY id"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _category_count(cat: str) -> int:
+    picks = _current_positions()
+    # We need market data to detect categories. Use stored market tags or question.
+    counts = {}
     for p in picks:
-        if p.get("market_category") == category:
-            count += 1
-    return count
+        c = _detect_category(p)
+        counts[c] = counts.get(c, 0) + 1
+    return counts.get(cat, 0)
 
 
-def _open_positions() -> int:
-    return len(store.live_picks())
-
-
-def execute_pick(pick_id: int, pick: dict, market: dict, plan: dict) -> bool:
-    """Paper-trade a pick: compute size, check limits, record fill.
-
-    Returns True if executed, False if skipped.
-    """
+def place_paper_order(pick_id: int, market: dict, direction: str,
+                      entry_price: float, verdict: str, approved: bool) -> dict | None:
+    """Simulate placing a paper order. Returns fill info or None if skipped."""
     if not PAPER_TRADING:
-        return False
+        return None
 
-    if not plan.get("approved"):
-        log.info("Paper broker: plan rejected #%d — %s", pick_id, plan.get("reasoning", ""))
-        return False
+    # Skip if not approved
+    if not approved:
+        log.info("Paper: #%d skipped (not approved, verdict=%s)", pick_id, verdict)
+        return None
 
-    cat_positions = _category_positions(market.get("category", ""))
-    open_pos = _open_positions()
+    # Check position limit
+    live = _current_positions()
+    if len(live) >= PM_MAX_POSITIONS:
+        log.info("Paper: #%d skipped (max %d positions)", pick_id, PM_MAX_POSITIONS)
+        return None
 
-    if open_pos >= PM_MAX_POSITIONS:
-        log.warning("Paper broker: max positions (%d) reached — skipping #%d",
-                     PM_MAX_POSITIONS, pick_id)
-        return False
+    # Check concentration limit
+    cat = _detect_category(market)
+    cat_count = _category_count(cat)
+    if cat_count >= CONCENTRATION_MAX_PER_CATEGORY:
+        log.info("Paper: #%d skipped (max %d per category '%s', have %d)",
+                 pick_id, CONCENTRATION_MAX_PER_CATEGORY, cat, cat_count)
+        return None
 
-    if cat_positions >= CONCENTRATION_MAX_PER_CATEGORY:
-        log.warning("Paper broker: category cap (%d) reached — skipping #%d",
-                     CONCENTRATION_MAX_PER_CATEGORY, pick_id)
-        return False
+    # Size by conviction
+    conviction = verdict
+    if conviction == "STRONG":
+        size = PM_BASE_USD
+    elif conviction == "SOFT":
+        size = PM_BASE_USD / 2
+    else:
+        size = PM_BASE_USD / 4
 
-    # Size: fraction of PM_MAX_POSITION_USD, floored at PM_BASE_USD
-    fraction = float(plan.get("size_fraction", 0.5))
-    if fraction <= 0:
-        return False
+    # Cap at max position size
+    if size > PM_MAX_POSITION_USD:
+        size = PM_MAX_POSITION_USD
 
-    size_usd = round(max(PM_BASE_USD, PM_MAX_POSITION_USD * fraction), 2)
-    direction = pick.get("direction", "BUY_YES")
-    price = pick.get("market_yes_price") if direction == "BUY_YES" else pick.get("market_no_price")
-    if not price or price <= 0:
-        price = 0.5
-
-    qty = round(size_usd / price, 2)
+    now = datetime.now(timezone.utc).isoformat()
+    order_id = f"paper-{uuid.uuid4().hex[:8]}"
 
     store.update_pick(pick_id,
-                      broker_order_id=f"paper-{pick_id}",
-                      broker_status="filled",
-                      broker_qty=qty,
-                      broker_fill_price=price,
-                      broker_fill_ts=_now(),
-                      position_size=size_usd,
-                      taken=1)
+        broker_order_id=order_id,
+        broker_status="filled",
+        broker_qty=round(size / entry_price, 2) if entry_price > 0 else 0,
+        broker_fill_price=round(entry_price, 4),
+        broker_fill_ts=now,
+        position_size=round(size, 2),
+    )
 
-    log.info("Paper broker: filled #%d — %s $%s @ $%s (%s)",
-             pick_id, direction, size_usd, price, f"{fraction:.0%}")
-
-    return True
+    log.info("Paper: #%d filled %s %s %dx @ $%.4f = $%.2f (%s/%s, cat=%s)",
+             pick_id, direction, verdict,
+             round(size / entry_price, 2) if entry_price > 0 else 0,
+             entry_price, size, verdict, conviction, cat)
+    return {
+        "order_id": order_id,
+        "size_usd": round(size, 2),
+        "qty": round(size / entry_price, 2) if entry_price > 0 else 0,
+        "fill_price": round(entry_price, 4),
+        "category": cat,
+    }

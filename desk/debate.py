@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from altavela.config import MODEL_MAP, PM_MAX_POSITIONS, PM_MAX_POSITION_USD
+from altavela.config import MODEL_MAP
 from altavela.desk import team
 from altavela.ledger import store
 
@@ -74,25 +74,6 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "summary": verdict["summary"],
     }
 
-    # Plan — decide sizing and whether to execute
-    cat = market.get("category", "")
-    open_pos = len(store.live_picks())
-    plan = await loop.run_in_executor(
-        None, lambda: team.plan_entry(
-            question, booked_dir, verdict["verdict"], bool(verdict["approved"]),
-            verdict["adjusted_probability"], verdict["adjusted_score"], flipped,
-            str(market.get("end_date", "")), 0, open_pos,
-            PM_MAX_POSITIONS, PM_MAX_POSITION_USD, decision_id))
-    model_tags["plan"] = plan.pop("_downgraded_model", MODEL_MAP.get("plan", "sonnet"))
-
-    yield {
-        "type": "plan",
-        "market_id": market["id"],
-        "approved": plan["approved"],
-        "size_fraction": plan["size_fraction"],
-        "reasoning": plan["reasoning"],
-    }
-
     # Write to ledger
     pick_id = store.record_pick({
         "market_id": market["id"],
@@ -101,7 +82,7 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "edge": pick.get("edge_hint", "MISPRICING"),
         "trigger_src": trigger_src,
         "direction": booked_dir,
-        "est_probability": verdict["adjusted_probability"],  # judge's final estimate, updated after debate
+        "est_probability": verdict["adjusted_probability"],
         "score": thesis["score"],
         "adjusted_score": verdict["adjusted_score"],
         "confidence": thesis["score"],
@@ -123,14 +104,21 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "market_volume": market.get("volume", 0),
         "market_liquidity": market.get("liquidity", 0),
         "market_end_date": market.get("end_date", ""),
-        "market_category": cat,
         "taken": 1,
     })
 
-    # Paper trade — execute if approved by plan + broker limits
-    from altavela.broker.paper import execute_pick
-    await loop.run_in_executor(
-        None, lambda: execute_pick(pick_id, pick, market, plan))
+    # Paper trading — simulate CLOB fill
+    try:
+        from altavela.broker.paper import place_paper_order
+        entry = prices[0] if booked_dir == "BUY_YES" else prices[1]
+        fill = place_paper_order(
+            pick_id, market, booked_dir, entry,
+            verdict["verdict"], bool(verdict["approved"]))
+        if fill:
+            log.info("Paper fill #%d: $%.2f %s @ $%.4f",
+                     pick_id, fill["size_usd"], booked_dir, fill["fill_price"])
+    except Exception as exc:
+        log.warning("Paper broker error: %s", exc)
 
     yield {
         "type": "_result",
