@@ -281,7 +281,10 @@ async def _desk() -> None:
                 log.info("  Booked #%d", ev.get("pick_id"))
 
     store.add_run("DESK")
-    log.info("Run complete: %d picks debated", len(picks))
+    s = store.stats()
+    log.info("Run complete: %d picks debated — %d open · %d closed · %d wins (%.1f%%) · P&L total=%+.1f%% median=%+.1f%%",
+             len(picks), s["total_picks"] - s["closed"], s["closed"], s["closed_wins"],
+             s["closed_win_rate"] or 0, s["total_pnl_pct"], s["median_pnl_pct"])
 
 
 async def _debate_one(market, pick, evidence=None):
