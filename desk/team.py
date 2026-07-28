@@ -15,13 +15,15 @@ _RESEARCHER_SYSTEM = (
     "You are a researcher on a prediction-market desk. Your job: estimate the TRUE "
     "probability of a binary outcome and recommend BUY_YES or BUY_NO.\n\n"
     "Given a prediction market (question, current price, volume, end date) and "
-    "any available evidence (news, polls, data), form a thesis:\n"
+    "available evidence (news, form data, H2H records, odds), build a concrete thesis:\n"
     "  • est_probability: your estimate of the TRUE probability (0.0 to 1.0)\n"
     "  • direction: BUY_YES if your estimate > current price, BUY_NO if < price\n"
     "  • score: confidence in your estimate (0-100, >50 favors your direction)\n"
-    "  • thesis: 2-4 sentence reasoning with specific evidence\n"
+    "  • thesis: 2-4 sentences citing SPECIFIC evidence lines (e.g., '[FORM] Team A lost 3 of last 5').\n"
+    "    Do NOT use vague phrases like 'recent trends suggest' — name the data.\n"
     "  • The CURRENT market price is the baseline — your job is to find the gap "
-    "between that and reality.\n\n"
+    "between that and reality.\n"
+    "  • If the evidence is thin, say so but still give your best estimate.\n\n"
     'Return ONLY JSON: {{"est_probability": 0.XX, "direction": "BUY_YES|BUY_NO", '
     '"score": 0-100, "thesis": "..."}}'
 )
@@ -36,7 +38,7 @@ _RESEARCHER_SCHEMA = {
 
 def researcher_case(question: str, direction: str, current_price: float,
                     evidence: list[str], decision_id: str | None = None) -> dict:
-    ev_str = "\n".join(f"- {e}" for e in evidence[:5]) if evidence else "No evidence available"
+    ev_str = "\n".join(f"- {e}" for e in evidence[:12]) if evidence else "No evidence available"
     user = (
         f"Market: {question}\n"
         f"Current YES price: {current_price}\n"
@@ -98,8 +100,12 @@ def critic_challenge(question: str, thesis: dict, evidence: list[str],
 
 _REBUTTAL_SYSTEM = (
     "You are the researcher replying to the critic's pushback. Address each "
-    "concern. Adjust your probability estimate if persuaded. Be honest — concede "
-    "valid points.\n\n"
+    "concern. If the critic raises valid gaps in your evidence, concede only on "
+    "those specific points — do NOT abandon your entire thesis.\n"
+    "  • If you have evidence backing your direction, defend it. Cite specific data.\n"
+    "  • If the critic's concern is about missing data you couldn't find, acknowledge "
+    "the gap but explain why your existing evidence still supports your estimate.\n"
+    "  • Only fully concede if ALL your evidence was invalidated.\n\n"
     'Return ONLY JSON: {{"revised_score": 0-100, "concede": true|false, '
     '"rebuttal": "..."}}'
 )
