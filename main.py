@@ -127,16 +127,13 @@ async def _watcher_loop():
                     direction = p.get("direction", "")
                     yes_px, no_px = prices[mid]
                     entry = p.get("market_yes_price") if direction == "BUY_YES" else p.get("market_no_price")
-                    est_prob = p.get("est_probability") or 0.5
 
                     if not entry or entry <= 0:
                         continue
 
                     if direction == "BUY_YES":
-                        target = min(est_prob, 0.99)
                         cur = yes_px
                     else:
-                        target = min(1.0 - est_prob, 0.99)
                         cur = no_px
 
                     tp = round(entry * (1 + WATCHER_TAKE_PROFIT_PCT / 100), 4)
@@ -157,9 +154,6 @@ async def _watcher_loop():
                     if trail_high and cur <= trail_high * (1 - WATCHER_TRAIL_PCT / 100):
                         peak = trail_high
                         reason = f"trailing-stop: price {cur} fell {WATCHER_TRAIL_PCT}% below peak {peak}"
-                        exit_px = cur
-                    elif cur >= target and target > entry:
-                        reason = f"target hit: price {cur} reached est fair value {target}"
                         exit_px = cur
                     elif cur <= stop:
                         reason = f"stopped out: price {cur} fell below stop {stop}"
