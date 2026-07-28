@@ -2,17 +2,11 @@
 
 Sources (all free, no API keys):
   - DuckDuckGo web search — real search results with snippets
-  - Wikipedia API — factual background + team page extracts
   - Polymarket metadata — market description, resolution source, category
-  - TheSportsDB — match results for head-to-head data
 """
 
-import json
 import logging
 import re
-import urllib.error
-import urllib.parse
-import urllib.request
 
 from ddgs import DDGS
 
@@ -48,30 +42,6 @@ def _web_search(query: str, max_results: int = 6) -> list[str]:
         else:
             log.warning("Web search failed: %s", exc)
         return []
-
-
-def _wikipedia_summary(query: str) -> str | None:
-    """Get a short Wikipedia extract for a search term. No API key needed."""
-    url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
-        "action": "query", "format": "json", "list": "search",
-        "srsearch": query, "srlimit": "1", "srprop": "snippet",
-        "origin": "*",
-    })
-    req = urllib.request.Request(url, headers={"User-Agent": "altavela/0.1"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode("utf-8", "replace"))
-    except Exception as exc:
-        log.debug("Wikipedia API failed: %s", exc)
-        return None
-
-    results = (data.get("query") or {}).get("search") or []
-    if results:
-        snippet = results[0].get("snippet", "")
-        snippet = re.sub(r"<[^>]+>", "", snippet)
-        if snippet:
-            return snippet[:300]
-    return None
 
 
 def _polymarket_context(market: dict) -> str | None:
@@ -110,14 +80,7 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
         if ctx:
             evidence.append(f"[MARKET] {ctx}")
 
-    # 2. Wikipedia background (free API, factual)
-    # Extract key terms from the question for a focused search
-    search_terms = question[:200]
-    wiki = _wikipedia_summary(search_terms)
-    if wiki:
-        evidence.append(f"[WIKI] {wiki}")
-
-    # 3. Web search (DuckDuckGo — real results with snippets)
+    # 2. Web search (DuckDuckGo — real results with snippets)
     # Generate targeted queries — use question plus tag-based variations
     queries = [question[:200]]
     if market:
@@ -160,6 +123,6 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
                 evidence.append(f"{label} {a}")
 
     if evidence:
-        n_web = len([e for e in evidence if not e.startswith("[MARKET]") and not e.startswith("[WIKI]")])
+        n_web = len([e for e in evidence if not e.startswith("[MARKET]")])
         log.info("Evidence: %d items (%d web) for '%s'", len(evidence), n_web, question[:60])
     return evidence
