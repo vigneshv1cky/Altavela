@@ -168,6 +168,20 @@ async def _watcher_loop():
                         exit_px = cur
 
                     # Stale position — no meaningful movement after 4 hours
+                    # Pre-game exit: sports markets about to start — avoid live volatility
+                    end_date = p.get("market_end_date", "")
+                    if not reason and end_date:
+                        from datetime import datetime, timezone
+                        try:
+                            dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+                            mins_to_start = (dt - datetime.now(timezone.utc)).total_seconds() / 60
+                            if 0 <= mins_to_start <= 30:
+                                reason = f"pre-game exit: match starts in {mins_to_start:.0f}min"
+                                exit_px = cur
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Stale position — no meaningful movement after 4 hours
                     ts = p.get("ts", "")
                     if not reason and ts:
                         from datetime import datetime, timezone
