@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 export type Theme = "light" | "dark" | "system"
 
@@ -22,6 +22,7 @@ function apply(t: Theme) {
 
 export function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(applied)
+  useEffect(() => { apply(theme) }, [theme])
   const cycle = () => {
     const order: Theme[] = ["light", "dark", "system"]
     const next = order[(order.indexOf(theme) + 1) % order.length]
