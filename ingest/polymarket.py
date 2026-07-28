@@ -146,22 +146,10 @@ def fetch_markets(
 
 
 def quality_filter(markets: list[dict]) -> list[dict]:
-    """Remove unprocessable markets: non-binary, extreme prices, multi-outcome ranges."""
-    import re
-    _RANGE_PATTERNS = [
-        r"between\s+[\d.,]+\s*(?:and|&|to|-)\s*[\d.,]+",       # "between X and Y"
-        r"above\s+[\d.,]+",                                      # "above X"
-        r"below\s+[\d.,]+",                                      # "below X"
-        r"(?:less|fewer|more|greater)\s+than\s+[\d.,]+",         # "less than X"
-        r"at\s+least\s+[\d.,]+",                                 # "at least X"
-        r"\b[\d.]+\s*-\s*[\d.]+\s*(?:launches|times|wins|goals|points|runs|degrees)",  # "5-6 launches"
-    ]
-    _range_re = re.compile("|".join(_RANGE_PATTERNS), re.IGNORECASE)
-
+    """Remove unprocessable markets: non-binary, extreme prices."""
     filtered = []
     dropped_nonbinary = 0
     dropped_extreme = 0
-    dropped_range = 0
 
     for m in markets:
         outcomes = m.get("outcomes", [])
@@ -173,17 +161,11 @@ def quality_filter(markets: list[dict]) -> list[dict]:
         if yes_px < 0.05 or yes_px > 0.95:
             dropped_extreme += 1
             continue
-        # Skip multi-outcome range markets — researcher can't assess
-        # the full probability distribution from a single binary slice
-        q = m.get("question", "")
-        if _range_re.search(q):
-            dropped_range += 1
-            continue
         filtered.append(m)
 
-    if dropped_nonbinary or dropped_extreme or dropped_range:
-        log.info("Quality filter: %d non-binary, %d extreme-price, %d range dropped, %d passed",
-                 dropped_nonbinary, dropped_extreme, dropped_range, len(filtered))
+    if dropped_nonbinary or dropped_extreme:
+        log.info("Quality filter: %d non-binary dropped, %d extreme-price dropped, %d passed",
+                 dropped_nonbinary, dropped_extreme, len(filtered))
     return filtered
 
 
