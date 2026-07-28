@@ -102,6 +102,9 @@ POLYMARKET_CLOB_BASE = os.environ.get("POLYMARKET_CLOB_BASE", "https://clob.poly
 POLYMARKET_PRIVATE_KEY = os.environ.get("POLYMARKET_PRIVATE_KEY", "")
 POLYMARKET_PROXY_WALLET = os.environ.get("POLYMARKET_PROXY_WALLET", "")
 
+# Sports data APIs (free tiers, no automatic creation — bring your own keys)
+THESPORTSDB_API_KEY = os.environ.get("THESPORTSDB_API_KEY", "")   # https://www.thesportsdb.com/free-sports-api
+
 # Paper trading
 PAPER_TRADING = os.environ.get("PAPER_TRADING", "0") not in ("0", "", "false", "False", "no")
 PM_BASE_USD = float(os.environ.get("PM_BASE_USD", "100"))

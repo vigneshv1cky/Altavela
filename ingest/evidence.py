@@ -160,8 +160,15 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
             for a in articles:
                 evidence.append(f"[NEWS] {a}")
 
-    # 5. Sports-specific: recent form, H2H, odds/previews
+    # 5. Sports-specific: structured API data, recent form, H2H, odds
     if _SPORTS_TERMS.search(question):
+        # Structured sports data (TheSportsDB — needs API key)
+        try:
+            from altavela.ingest.sports import fetch_sports_data
+            sports_lines = fetch_sports_data(question, market)
+            evidence.extend(sports_lines)
+        except Exception as exc:
+            log.debug("Sports data fetch failed: %s", exc)
         tags_str = " ".join(market.get("tags", [])[:2]) if market else ""
         base = f"{question[:120]} {tags_str}".strip()
         for suffix, label in [
