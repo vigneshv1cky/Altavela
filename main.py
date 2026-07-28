@@ -156,7 +156,7 @@ async def _watcher_loop():
                         peak = trail_high
                         reason = f"trailing-stop: price {cur} fell {WATCHER_TRAIL_PCT}% below peak {peak}"
                         exit_px = cur
-                    elif cur >= target:
+                    elif cur >= target and target > entry:
                         reason = f"target hit: price {cur} reached est fair value {target}"
                         exit_px = cur
                     elif cur <= stop:
