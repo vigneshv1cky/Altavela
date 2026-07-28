@@ -70,28 +70,6 @@ def _wikipedia_summary(query: str) -> str | None:
     return None
 
 
-def _wikipedia_extract(title: str) -> str | None:
-    """Fetch the intro extract of a Wikipedia page by title."""
-    url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
-        "action": "query", "format": "json", "prop": "extracts",
-        "exintro": "1", "explaintext": "1",
-        "titles": title, "origin": "*",
-    })
-    req = urllib.request.Request(url, headers={"User-Agent": "altavela/0.1"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode("utf-8", "replace"))
-    except Exception as exc:
-        log.debug("Wikipedia extract failed: %s", exc)
-        return None
-    pages = (data.get("query") or {}).get("pages") or {}
-    for _pid, info in pages.items():
-        extract = info.get("extract", "")
-        if extract:
-            return extract[:500]
-    return None
-
-
 def _polymarket_context(market: dict) -> str | None:
     """Extract useful metadata from a Polymarket market dict."""
     parts = []
@@ -165,38 +143,17 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
         if len(seen) >= 8:
             break
 
-    # 5. Sports-specific: structured API data, recent form, H2H, odds
+    # 4. Sports-specific: targeted searches for form, H2H, odds
     if _SPORTS_TERMS.search(question):
-        # Structured sports data (TheSportsDB — needs API key)
-        try:
-            from altavela.ingest.sports import fetch_sports_data
-            sports_lines = fetch_sports_data(question, market)
-            evidence.extend(sports_lines)
-        except Exception as exc:
-            log.debug("Sports data fetch failed: %s", exc)
         tags_str = " ".join(market.get("tags", [])[:2]) if market else ""
-        base = f"{question[:120]} {tags_str}".strip()
         for suffix, label in [
-            ("recent results form last 5 matches", "[FORM]"),
-            ("head to head record history", "[H2H]"),
-            ("betting odds prediction preview", "[ODDS]"),
+            ("results last 5 matches", "[FORM]"),
+            ("head to head history", "[H2H]"),
+            ("odds prediction", "[ODDS]"),
         ]:
-            query = f"{base} {suffix}"[:250]
-            for a in _web_search(query, max_results=3):
+            q = f"{question[:100]} {tags_str} {suffix}"[:200]
+            for a in _web_search(q, max_results=3):
                 evidence.append(f"{label} {a}")
-
-        # Sports Wikipedia: look up team pages for roster/form data
-        for part in re.split(r"\b(?:vs|versus|vs\.)\b", question, flags=re.IGNORECASE):
-            part = part.strip().rstrip("?")
-            if not part or len(part) < 4:
-                continue
-            # Remove common suffixes like (BO3), - Map 2, etc.
-            name = re.split(r"\s*[\(-]", part)[0].strip()
-            if len(name) < 4:
-                continue
-            extract = _wikipedia_extract(name)
-            if extract:
-                evidence.append(f"[TEAM] {name}: {extract}")
 
     if evidence:
         log.info("Evidence: %d items for '%s'", len(evidence), question[:60])
