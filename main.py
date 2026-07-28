@@ -98,13 +98,16 @@ async def _serve() -> None:
 
 async def _watcher_loop():
     """Watch open positions — exit when price reaches the researcher's estimated
-    fair value (target) or falls past the stop-loss threshold."""
+    fair value (target) or falls past the stop-loss threshold.
+    Uses a trailing stop after take-profit threshold to capture large moves."""
     from altavela.ingest.polymarket import live_prices
     from altavela.ledger import store
-    from altavela.config import WATCHER_TAKE_PROFIT_PCT
+    from altavela.config import WATCHER_TAKE_PROFIT_PCT, WATCHER_TRAIL_PCT
 
     loop = asyncio.get_running_loop()
     log_w = logging.getLogger("altavela.watch")
+
+    _trail: dict[int, float] = {}  # pick_id -> highest price seen (trailing)
 
     while True:
         try:
@@ -114,6 +117,7 @@ async def _watcher_loop():
                 prices = await loop.run_in_executor(None, live_prices, mids) if mids else {}
 
                 for p in picks:
+                    pid = p["id"]
                     mid = p.get("market_id", "")
                     if mid not in prices:
                         continue
@@ -126,9 +130,6 @@ async def _watcher_loop():
                     if not entry or entry <= 0:
                         continue
 
-                    # Target = researcher's estimated fair value
-                    # Stop = entry - max(entry * 0.25, 0.03) — 25% or 3 cents max loss
-                    # Take-profit at 10% gain
                     if direction == "BUY_YES":
                         target = min(est_prob, 0.99)
                         cur = yes_px
@@ -139,10 +140,19 @@ async def _watcher_loop():
                     tp = round(entry * (1 + WATCHER_TAKE_PROFIT_PCT / 100), 4)
                     stop = max(entry - max(entry * 0.25, 0.03), 0.01)
 
+                    # Trailing stop: activate once price passes TP, track peak,
+                    # exit when price drops TRAIL_PCT below peak
+                    trail_high = _trail.get(pid)
+                    if cur >= tp:
+                        if trail_high is None or cur > trail_high:
+                            _trail[pid] = cur
+                            trail_high = cur
+
                     reason = None
                     exit_px = None
-                    if cur >= tp:
-                        reason = f"take-profit: price {cur} > {tp} (+{round((cur-entry)/entry*100,1)}%)"
+                    if trail_high and cur <= trail_high * (1 - WATCHER_TRAIL_PCT / 100):
+                        peak = trail_high
+                        reason = f"trailing-stop: price {cur} fell {WATCHER_TRAIL_PCT}% below peak {peak}"
                         exit_px = cur
                     elif cur >= target:
                         reason = f"target hit: price {cur} reached est fair value {target}"
@@ -152,14 +162,20 @@ async def _watcher_loop():
                         exit_px = cur
 
                     if reason:
+                        _trail.pop(pid, None)
                         pnl = (exit_px - entry) / entry * 100
 
                         await loop.run_in_executor(
-                            None, lambda pid=p["id"], r=reason, px=exit_px:
+                            None, lambda pid=pid, r=reason, px=exit_px:
                             store.record_exit(pid, r, px))
                         log_w.info("Exit #%d %s %s: %s (pnl %+.1f%%)",
-                                   p["id"], direction, p.get("question", "?")[:50],
+                                   pid, direction, p.get("question", "?")[:50],
                                    reason, pnl)
+            # Clean up stale trail entries for picks that no longer exist
+            live_ids = {p["id"] for p in picks}
+            for pid in list(_trail):
+                if pid not in live_ids:
+                    _trail.pop(pid, None)
         except Exception as exc:
             log_w.error("watcher error: %s", exc)
         await asyncio.sleep(120)   # check every 2 min
