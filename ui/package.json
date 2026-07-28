@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "tar -czf - -C ../app/static . | gcloud compute ssh altavela --project altavela-research --zone us-east4-a --command 'sudo rm -rf /opt/alphadesk/altavela/app/static/assets /opt/alphadesk/altavela/app/static/index.html && sudo tar -xzf - -C /opt/alphadesk/altavela/app/static && sudo systemctl restart altavela'"
   },
   "keywords": [],
   "author": "",
