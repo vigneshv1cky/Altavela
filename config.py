@@ -125,7 +125,7 @@ WATCHER_TRAIL_PCT = float(os.environ.get("WATCHER_TRAIL_PCT", "2"))
 WATCHER_STALE_HOURS = float(os.environ.get("WATCHER_STALE_HOURS", "4"))
 WATCHER_STALE_MOVE_PCT = float(os.environ.get("WATCHER_STALE_MOVE_PCT", "1"))
 # Stop loss — exit if price drops this % from entry
-WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "25"))
+WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "10"))
 # How often the watcher checks positions
 WATCHER_INTERVAL_S = int(os.environ.get("WATCHER_INTERVAL_S", "60"))
 
