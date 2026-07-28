@@ -103,6 +103,13 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
             key = a[:80]
             if key in seen:
                 continue
+            # For sports: only keep results mentioning the actual teams/players
+            if _SPORTS_TERMS.search(question):
+                parts = re.split(r"\b(?:vs|versus|vs\.)\b", question, flags=re.IGNORECASE)
+                if len(parts) >= 2:
+                    names = [re.split(r"\s*[\(-]", p)[0].strip().lower() for p in parts if len(p.strip()) > 2]
+                    if names and not any(n in a.lower() for n in names):
+                        continue
             seen.add(key)
             evidence.append(f"[SEARCH] {a}")
             if len(seen) >= 8:
@@ -113,6 +120,9 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
     # 4. Sports-specific: targeted searches for form, H2H, odds
     if _SPORTS_TERMS.search(question):
         tags_str = " ".join(market.get("tags", [])[:2]) if market else ""
+        # Extract team/player names for relevance filtering
+        parts = re.split(r"\b(?:vs|versus|vs\.)\b", question, flags=re.IGNORECASE)
+        names = [re.split(r"\s*[\(-]", p)[0].strip().lower() for p in parts if len(p.strip()) > 2] if len(parts) >= 2 else []
         for suffix, label in [
             ("results last 5 matches", "[FORM]"),
             ("head to head history", "[H2H]"),
@@ -120,6 +130,8 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
         ]:
             q = f"{question[:100]} {tags_str} {suffix}"[:200]
             for a in _web_search(q, max_results=3):
+                if names and not any(n in a.lower() for n in names):
+                    continue
                 evidence.append(f"{label} {a}")
 
     if evidence:
