@@ -146,27 +146,28 @@ def fetch_markets(
 
 
 def quality_filter(markets: list[dict]) -> list[dict]:
-    """Remove unprocessable markets: non-binary (>2 outcomes). Everything else
-    — extreme prices, near-expiry, low volume — is the scout's judgment call.
-    Code removes what it knows is useless; agents decide what's edge."""
+    """Remove unprocessable markets: non-binary, extreme prices."""
     filtered = []
-    dropped = 0
+    dropped_nonbinary = 0
+    dropped_extreme = 0
 
     for m in markets:
         outcomes = m.get("outcomes", [])
         if len(outcomes) != 2:
-            dropped += 1
+            dropped_nonbinary += 1
+            continue
+        prices = m.get("prices", [0.5, 0.5])
+        yes_px = prices[0] if len(prices) > 0 else 0.5
+        # Skip extreme-price markets — no meaningful edge at <5% or >95%
+        if yes_px < 0.05 or yes_px > 0.95:
+            dropped_extreme += 1
             continue
         filtered.append(m)
 
-    if dropped:
-        log.info("Quality filter: %d non-binary dropped, %d passed", dropped, len(filtered))
+    if dropped_nonbinary or dropped_extreme:
+        log.info("Quality filter: %d non-binary dropped, %d extreme-price dropped, %d passed",
+                 dropped_nonbinary, dropped_extreme, len(filtered))
     return filtered
-    """Fetch full details for one market, including resolution history."""
-    data = _get(f"/markets/{market_id}")
-    if isinstance(data, dict) and data.get("id"):
-        return data
-    return None
 
 
 def market_detail(market_id: str) -> dict | None:

@@ -193,7 +193,7 @@ async def _desk() -> None:
     log = logging.getLogger("altavela.desk")
 
     log.info("Fetching active prediction markets…")
-    markets = fetch_markets(limit=50, min_volume=5000)
+    markets = fetch_markets(limit=50, min_volume=10000)
     if not markets:
         log.info("No active markets found")
         return
