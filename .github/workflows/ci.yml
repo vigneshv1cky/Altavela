@@ -3,20 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    paths:
-      - "**.py"
-      - "requirements.txt"
-      - "ui/src/**"
-      - "ui/package.json"
-      - "ui/pnpm-lock.yaml"
-      - ".github/workflows/ci.yml"
   pull_request:
-    paths:
-      - "**.py"
-      - "requirements.txt"
-      - "ui/src/**"
-      - "ui/package.json"
-      - "ui/pnpm-lock.yaml"
 
 jobs:
   backend:
@@ -63,6 +50,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "latest"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - name: Build UI
+        run: cd ui && pnpm install && pnpm build
       - name: Deploy to VM
         uses: appleboy/ssh-action@v1
         with:
@@ -79,5 +76,26 @@ jobs:
             sudo git reset --hard origin/main
             sudo pip install -r requirements.txt
             sudo systemctl restart altavela
-            echo "Deployed — altavela restarted"
+            echo "Backend deployed — altavela restarted"
             sudo journalctl -u altavela --no-pager -n 3
+      - name: Deploy UI
+        uses: appleboy/scp-action@v0
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: vignesh
+          key: ${{ secrets.GCP_SSH_KEY }}
+          source: "app/static/*"
+          target: "/tmp/static-upload"
+          strip_components: 1
+          rm: true
+      - name: Reload UI
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: vignesh
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            sudo rm -rf /opt/altavela/app/static/assets /opt/altavela/app/static/index.html
+            sudo cp -r /tmp/static-upload/* /opt/altavela/app/static/
+            sudo systemctl restart altavela
+            echo "UI deployed"
