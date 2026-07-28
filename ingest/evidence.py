@@ -42,7 +42,11 @@ def _web_search(query: str, max_results: int = 6) -> list[str]:
                 results.append(line)
             return results
     except Exception as exc:
-        log.debug("Web search failed: %s", exc)
+        msg = str(exc).lower()
+        if "ratelimit" in msg or "403" in msg or "block" in msg:
+            log.warning("DuckDuckGo rate-limited/blocked — backing off")
+        else:
+            log.warning("Web search failed: %s", exc)
         return []
 
 
@@ -156,5 +160,6 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
                 evidence.append(f"{label} {a}")
 
     if evidence:
-        log.info("Evidence: %d items for '%s'", len(evidence), question[:60])
+        n_web = len([e for e in evidence if not e.startswith("[MARKET]") and not e.startswith("[WIKI]")])
+        log.info("Evidence: %d items (%d web) for '%s'", len(evidence), n_web, question[:60])
     return evidence
