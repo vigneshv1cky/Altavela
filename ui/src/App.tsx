@@ -21,7 +21,7 @@ interface Pick {
 }
 
 interface Stats { total_picks: number; resolved: number; wins: number; win_rate: number | null }
-interface TimelineRow { id: number; direction: string; question: string; resolved: number; outcome: number | null; adjusted_score: number; verdict: string }
+interface TimelineRow { id: number; direction: string; question: string; resolved: number; outcome: number | null; adjusted_score: number; verdict: string; pnl_return_pct: number | null }
 interface TokenRow { role: string; model: string; input_tok: number; output_tok: number }
 
 const TAGS: Record<string, [string, string]> = {
@@ -235,8 +235,13 @@ export default function App() {
                     )}
                   </div>
                   <div className="text-sm text-zinc-800 dark:text-zinc-200 line-clamp-2">{t.question}</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    conf {(t.adjusted_score ?? 0).toFixed(0)} · {t.verdict}
+                  <div className="text-[11px] text-muted-foreground flex justify-between">
+                    <span>conf {(t.adjusted_score ?? 0).toFixed(0)} · {t.verdict}</span>
+                    {t.pnl_return_pct != null && (
+                      <span className={t.pnl_return_pct >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        {t.pnl_return_pct >= 0 ? "+" : ""}{t.pnl_return_pct}%
+                      </span>
+                    )}
                   </div>
                 </Card>
               ))}

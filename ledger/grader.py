@@ -33,23 +33,27 @@ def grade_due() -> int:
             pass
 
         if detail and detail.get("resolved"):
-            # Market resolved — stamp the outcome
-            # Polymarket resolved markets have `resolved` = true
-            # The winning outcome is in `outcomes` array based on resolution
-            resolved_price = float(detail.get("resolutionPrice", detail.get("resolution_price", 0.5)) or 0.5)
-            # Convert to binary: which side won?
-            # If we bought YES at entry, and YES resolved (price→1), outcome=1.0
-            # If we bought NO, and YES resolved, outcome=0.0
             direction = p.get("direction", "")
+            resolved_price = float(detail.get("resolutionPrice", detail.get("resolution_price", 0.5)) or 0.5)
+
             if direction == "BUY_YES":
                 outcome = 1.0 if resolved_price > 0.5 else 0.0
-            else:  # BUY_NO
+            else:
                 outcome = 1.0 if resolved_price < 0.5 else 0.0
 
-            store.mark_resolved(p["id"], outcome)
+            # Compute P&L: if we bought at entry_price and resolved at $1 (win) or $0 (loss)
+            entry = p.get("market_yes_price") if direction == "BUY_YES" else p.get("market_no_price")
+            pnl_pct = None
+            if entry and entry > 0:
+                if outcome == 1.0:
+                    pnl_pct = round((1.0 - entry) / entry * 100, 1)  # resolved at $1
+                else:
+                    pnl_pct = round((0.0 - entry) / entry * 100, 1)  # resolved at $0
+
+            store.mark_resolved(p["id"], outcome, pnl_pct=pnl_pct)
             graded += 1
-            log.info("Graded #%d %s → outcome=%s (resolution price=%s)",
-                     p["id"], p.get("question", "?")[:60], outcome, resolved_price)
+            log.info("Graded #%d %s → outcome=%s pnl=%s",
+                     p["id"], p.get("question", "?")[:60], outcome, pnl_pct)
 
         # For unresolved markets, update mark-to-market P&L
         # (skipping for now — would need live price fetching)
