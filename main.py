@@ -104,7 +104,7 @@ async def _watcher_loop():
     Uses a trailing stop after take-profit threshold to capture large moves."""
     from altavela.ingest.polymarket import live_prices
     from altavela.ledger import store
-    from altavela.config import WATCHER_TAKE_PROFIT_PCT, WATCHER_TRAIL_PCT
+    from altavela.config import WATCHER_TAKE_PROFIT_PCT, WATCHER_TRAIL_PCT, WATCHER_STALE_HOURS, WATCHER_STALE_MOVE_PCT
 
     loop = asyncio.get_running_loop()
     log_w = logging.getLogger("altavela.watch")
@@ -162,6 +162,18 @@ async def _watcher_loop():
                     elif cur <= stop:
                         reason = f"stopped out: price {cur} fell below stop {stop}"
                         exit_px = cur
+
+                    # Stale position — no meaningful movement after 4 hours
+                    ts = p.get("ts", "")
+                    if not reason and ts:
+                        from datetime import datetime, timezone
+                        try:
+                            age_h = (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds() / 3600
+                            if age_h >= WATCHER_STALE_HOURS and abs((cur - entry) / entry * 100) < WATCHER_STALE_MOVE_PCT:
+                                reason = f"stale: no movement after {age_h:.0f}h"
+                                exit_px = cur
+                        except (ValueError, TypeError):
+                            pass
 
                     if reason:
                         _trail.pop(pid, None)
