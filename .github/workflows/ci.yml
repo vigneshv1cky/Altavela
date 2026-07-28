@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - "ui/src/**"
+      - "ui/package.json"
+      - "ui/pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - "ui/src/**"
+      - "ui/package.json"
+      - "ui/pnpm-lock.yaml"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: |
+          python -c "
+          from config import MODEL_MAP, MODEL_PROVIDER
+          from llm import call_role, wrap_data, LLMError
+          from ledger.store import init as store_init
+          store_init()
+          print('Altavela imports OK')
+          print(f'Provider: {MODEL_PROVIDER}')
+          "
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "latest"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - run: pnpm install
+      - run: pnpm build
+
+  deploy:
+    name: Deploy to GCP
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.GCP_VM_IP }}
+          username: vignesh
+          key: ${{ secrets.GCP_SSH_KEY }}
+          script: |
+            set -e
+            if [ ! -d /opt/altavela ]; then
+              sudo git clone https://github.com/vigneshv1cky/Altavela.git /opt/altavela
+            fi
+            cd /opt/altavela
+            sudo git pull origin main
+            sudo pip install -r requirements.txt
+            sudo systemctl restart altavela
+            echo "Deployed — altavela restarted"
+            sudo journalctl -u altavela --no-pager -n 3
