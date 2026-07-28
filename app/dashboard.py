@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
 
             result.append({
                 "id": p["id"],
+                "ts": p.get("ts"),
                 "question": (p.get("question") or "")[:100],
                 "direction": direction,
                 "score": p.get("adjusted_score") or p.get("score"),
