@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 log = logging.getLogger("altavela.evidence")
 
@@ -135,18 +135,35 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
     if wiki:
         evidence.append(f"[WIKI] {wiki}")
 
-    # 3. Web search (DuckDuckGo — real results, not just RSS headlines)
-    articles = _web_search(search_terms)
-    for a in articles:
-        evidence.append(f"[SEARCH] {a}")
-
-    # 4. If no search results, try broader tag-based query
-    if len([e for e in evidence if e.startswith("[SEARCH]")]) == 0 and market:
-        tags = market.get("tags", [])
+    # 3. Web search (DuckDuckGo — real results with snippets)
+    # Generate targeted queries — use question plus tag-based variations
+    queries = [question[:200]]
+    if market:
+        tags = market.get("tags", []) or []
         if tags:
-            articles = _web_search(" ".join(tags[:3]))
-            for a in articles:
-                evidence.append(f"[SEARCH] {a}")
+            queries.append(" ".join(tags[:3]))
+        # For sports: add "match" / "vs" specific queries
+        if _SPORTS_TERMS.search(question):
+            parts = re.split(r"\b(?:vs|versus|vs\.)\b", question, flags=re.IGNORECASE)
+            if len(parts) >= 2:
+                n1 = re.split(r"\s*[\(-]", parts[0])[0].strip()
+                n2 = re.split(r"\s*[\(-]", parts[1])[0].strip()
+                if len(n1) > 2 and len(n2) > 2:
+                    queries.append(f'"{n1}" "{n2}" match result')
+                    queries.append(f"{n1} {n2} h2h prediction odds")
+
+    seen = set()
+    for q in queries:
+        for a in _web_search(q.strip()[:200], max_results=4):
+            key = a[:80]
+            if key in seen:
+                continue
+            seen.add(key)
+            evidence.append(f"[SEARCH] {a}")
+            if len(seen) >= 8:
+                break
+        if len(seen) >= 8:
+            break
 
     # 5. Sports-specific: structured API data, recent form, H2H, odds
     if _SPORTS_TERMS.search(question):
