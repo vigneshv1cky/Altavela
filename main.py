@@ -125,6 +125,17 @@ async def _watcher_loop():
                     if not entry or entry <= 0:
                         continue
 
+                    # Don't exit positions younger than 5 min — let the market breathe
+                    ts = p.get("ts", "")
+                    if ts:
+                        from datetime import datetime, timezone
+                        try:
+                            age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds()
+                            if age_s < 300:
+                                continue
+                        except (ValueError, TypeError):
+                            pass
+
                     # Target = researcher's estimated fair value
                     # Stop = entry - max(entry * 0.25, 0.03) — 25% or 3 cents max loss
                     if direction == "BUY_YES":
@@ -138,7 +149,7 @@ async def _watcher_loop():
 
                     reason = None
                     exit_px = None
-                    if cur >= target:
+                    if target > entry and cur >= target:
                         reason = f"target hit: price {cur} reached est fair value {target}"
                         exit_px = cur
                     elif cur <= stop:
