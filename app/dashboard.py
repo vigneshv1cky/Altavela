@@ -83,9 +83,9 @@ def create_app() -> FastAPI:
         return result
 
     @app.get("/api/timelines")
-    async def api_timelines():
+    async def api_timelines(exited_only: str = "1"):
         """All picks with outcomes — for the track record."""
-        rows = store.all_picks(limit=50)
+        rows = store.all_picks(limit=50, exited_only=exited_only != "0")
         return rows
 
     @app.get("/api/pick/{pick_id}")

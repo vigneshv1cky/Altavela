@@ -135,10 +135,11 @@ def get_pick(pick_id: int) -> dict | None:
     return _decode(dict(row)) if row else None
 
 
-def all_picks(limit: int = 200) -> list[dict]:
+def all_picks(limit: int = 200, exited_only: bool = False) -> list[dict]:
     with _connect() as conn:
+        extra = " AND exit_ts IS NOT NULL" if exited_only else ""
         rows = conn.execute(
-            "SELECT * FROM picks WHERE arm='TEAM' ORDER BY id DESC LIMIT ?",
+            f"SELECT * FROM picks WHERE arm='TEAM'{extra} ORDER BY id DESC LIMIT ?",
             (limit,)
         ).fetchall()
     return [_decode(dict(r)) for r in rows]
