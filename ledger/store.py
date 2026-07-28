@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS picks (
     market_volume    REAL,
     market_liquidity REAL,
     market_end_date  TEXT,
+    market_category  TEXT,               -- category for concentration caps
     -- outcomes
     resolved        INTEGER NOT NULL DEFAULT 0,     -- 1 = resolved, 0 = not yet
     outcome         REAL,                           -- 1.0 = correct, 0.0 = wrong, NULL = unresolved
@@ -100,6 +101,14 @@ def init() -> None:
     _DB.parent.mkdir(parents=True, exist_ok=True)
     with _lock, _connect() as conn:
         conn.executescript(_SCHEMA)
+        # Add columns that may not exist on older databases
+        for col_sql in [
+            "ALTER TABLE picks ADD COLUMN market_category TEXT",
+        ]:
+            try:
+                conn.execute(col_sql)
+            except sqlite3.OperationalError:
+                pass
 
 
 def _now() -> str:

@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from altavela.config import MODEL_MAP
+from altavela.config import MODEL_MAP, PM_MAX_POSITIONS, PM_MAX_POSITION_USD
 from altavela.desk import team
 from altavela.ledger import store
 
@@ -74,6 +74,25 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "summary": verdict["summary"],
     }
 
+    # Plan — decide sizing and whether to execute
+    cat = market.get("category", "")
+    open_pos = len(store.live_picks())
+    plan = await loop.run_in_executor(
+        None, lambda: team.plan_entry(
+            question, booked_dir, verdict["verdict"], bool(verdict["approved"]),
+            verdict["adjusted_probability"], verdict["adjusted_score"], flipped,
+            str(market.get("end_date", "")), 0, open_pos,
+            PM_MAX_POSITIONS, PM_MAX_POSITION_USD, decision_id))
+    model_tags["plan"] = plan.pop("_downgraded_model", MODEL_MAP.get("plan", "sonnet"))
+
+    yield {
+        "type": "plan",
+        "market_id": market["id"],
+        "approved": plan["approved"],
+        "size_fraction": plan["size_fraction"],
+        "reasoning": plan["reasoning"],
+    }
+
     # Write to ledger
     pick_id = store.record_pick({
         "market_id": market["id"],
@@ -104,8 +123,14 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "market_volume": market.get("volume", 0),
         "market_liquidity": market.get("liquidity", 0),
         "market_end_date": market.get("end_date", ""),
+        "market_category": cat,
         "taken": 1,
     })
+
+    # Paper trade — execute if approved by plan + broker limits
+    from altavela.broker.paper import execute_pick
+    await loop.run_in_executor(
+        None, lambda: execute_pick(pick_id, pick, market, plan))
 
     yield {
         "type": "_result",
