@@ -149,12 +149,7 @@ async def _watcher_loop():
                         exit_px = cur
 
                     if reason:
-                        # P&L: return = (exit - entry) / entry for BUY_YES
-                        # For BUY_NO: return = (entry - exit) / entry (profit when NO price goes up)
-                        if direction == "BUY_YES":
-                            pnl = (exit_px - entry) / entry * 100
-                        else:
-                            pnl = (entry - exit_px) / entry * 100
+                        pnl = (exit_px - entry) / entry * 100
 
                         await loop.run_in_executor(
                             None, lambda pid=p["id"], r=reason, px=exit_px:

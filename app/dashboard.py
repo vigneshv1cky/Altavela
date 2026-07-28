@@ -67,7 +67,7 @@ def create_app() -> FastAPI:
             cur = yes_px if direction == "BUY_YES" else no_px
             pnl_pct = None
             if entry and cur and entry > 0:
-                pnl_pct = round((cur - entry) / entry * 100, 1) if direction == "BUY_YES" else round((entry - cur) / entry * 100, 1)
+                pnl_pct = round((cur - entry) / entry * 100, 1)
 
             result.append({
                 "id": p["id"],
