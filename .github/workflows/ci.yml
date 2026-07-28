@@ -75,7 +75,8 @@ jobs:
               sudo git clone https://github.com/vigneshv1cky/Altavela.git /opt/altavela
             fi
             cd /opt/altavela
-            sudo git pull origin main
+            sudo git fetch origin main
+            sudo git reset --hard origin/main
             sudo pip install -r requirements.txt
             sudo systemctl restart altavela
             echo "Deployed — altavela restarted"
