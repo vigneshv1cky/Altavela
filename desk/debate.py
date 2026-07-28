@@ -74,23 +74,6 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "summary": verdict["summary"],
     }
 
-    # PASS = no edge found, skip recording entirely
-    if verdict["verdict"] == "PASS":
-        log.info("Skip #%s: judge PASS — no edge", market["id"])
-        yield {
-            "type": "_result",
-            "pick_id": None,
-            "market_id": market["id"],
-            "question": question,
-            "direction": booked_dir,
-            "approved": False,
-            "score": verdict["adjusted_score"],
-            "verdict": "PASS",
-            "flipped": flipped,
-            "skipped": True,
-        }
-        return
-
     # Write to ledger
     pick_id = store.record_pick({
         "market_id": market["id"],

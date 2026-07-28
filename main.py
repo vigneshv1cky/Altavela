@@ -278,11 +278,7 @@ async def _desk() -> None:
                          ev.get("direction"), ev.get("approved"),
                          ev.get("adjusted_score"), ev.get("flipped"))
             elif t == "_result":
-                pid = ev.get("pick_id")
-                if pid:
-                    log.info("  Booked #%d", pid)
-                else:
-                    log.info("  Skipped (PASS)")
+                log.info("  Booked #%d", ev.get("pick_id"))
 
     store.add_run("DESK")
     s = store.stats()
