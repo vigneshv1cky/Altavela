@@ -172,7 +172,7 @@ def update_pick(pick_id: int, **fields: Any) -> None:
 def due_for_grading(limit: int = 100) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM picks WHERE graded_at IS NULL AND resolved=0 ORDER BY id LIMIT ?",
+            "SELECT * FROM picks WHERE graded_at IS NULL AND resolved=0 AND exit_ts IS NULL ORDER BY id LIMIT ?",
             (limit,),
         ).fetchall()
     return [dict(r) for r in rows]
