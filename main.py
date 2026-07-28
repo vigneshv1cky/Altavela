@@ -37,6 +37,7 @@ async def _serve() -> None:
     async def _autorun_loop():
         from datetime import datetime, timedelta
         from altavela.config import AUTORUN_END_ET, AUTORUN_INTERVAL_HOURS, AUTORUN_START_ET
+        from altavela.ledger import store
         from zoneinfo import ZoneInfo
         ET = ZoneInfo("America/New_York")
         log = logging.getLogger("altavela.autorun")
@@ -59,20 +60,32 @@ async def _serve() -> None:
                 now = datetime.now(ET)
                 in_window = ((now.hour, now.minute) >= (s_h, s_m) and
                              (now.hour, now.minute) < (e_h, e_m))
-                mins_since_start = (now.hour - s_h) * 60 + (now.minute - s_m)
-                next_slot_min = ((mins_since_start // int(AUTORUN_INTERVAL_HOURS * 60)) + 1) * int(AUTORUN_INTERVAL_HOURS * 60)
-                next_slot = now.replace(hour=s_h + next_slot_min // 60,
-                                        minute=next_slot_min % 60,
-                                        second=0, microsecond=0)
+                # Compute CURRENT slot (last interval boundary) — not NEXT.
+                # The old +1 always pointed to the future slot, so the autorun never fired.
+                window_start = now.replace(hour=s_h, minute=s_m, second=0, microsecond=0)
+                mins_since_start = (now - window_start).total_seconds() / 60
+                elapsed = int(mins_since_start) // int(AUTORUN_INTERVAL_HOURS * 60)
+                current_slot = window_start + timedelta(hours=elapsed * AUTORUN_INTERVAL_HOURS)
 
-                if in_window and not running and now >= next_slot:
-                    running = True
-                    try:
-                        log.info("Auto-run: firing")
-                        await _desk()
-                        log.info("Auto-run complete")
-                    finally:
-                        running = False
+                if in_window and not running and now >= current_slot:
+                    # Restart-safe: check if THIS slot already ran
+                    lt = store.last_run_time("DESK")
+                    last_slot = None
+                    if lt:
+                        try:
+                            last_dt = datetime.fromisoformat(lt).astimezone(ET)
+                            last_slot = last_dt.replace(minute=int(last_dt.minute // int(AUTORUN_INTERVAL_HOURS * 60)) * int(AUTORUN_INTERVAL_HOURS * 60),
+                                                        second=0, microsecond=0)
+                        except (ValueError, TypeError):
+                            pass
+                    if last_slot is None or last_slot < current_slot:
+                        running = True
+                        try:
+                            log.info("Auto-run: firing")
+                            await _desk()
+                            log.info("Auto-run complete")
+                        finally:
+                            running = False
             except Exception as exc:
                 log.error("auto-run error: %s", exc)
             await asyncio.sleep(60)
