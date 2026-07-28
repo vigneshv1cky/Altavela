@@ -151,7 +151,15 @@ async def _watcher_loop():
 
                     reason = None
                     exit_px = None
-                    if trail_high and cur <= trail_high * (1 - WATCHER_TRAIL_PCT / 100):
+                    # Market resolved: price ≤0.001 or ≥0.999 — the event is over
+                    if yes_px <= 0.001 or yes_px >= 0.999:
+                        if direction == "BUY_YES":
+                            won = yes_px >= 0.999
+                        else:
+                            won = yes_px <= 0.001
+                        reason = f"market resolved: {'WIN' if won else 'LOSS'} (YES={yes_px})"
+                        exit_px = cur
+                    elif trail_high and cur <= trail_high * (1 - WATCHER_TRAIL_PCT / 100):
                         peak = trail_high
                         reason = f"trailing-stop: price {cur} fell {WATCHER_TRAIL_PCT}% below peak {peak}"
                         exit_px = cur
@@ -178,6 +186,12 @@ async def _watcher_loop():
                         await loop.run_in_executor(
                             None, lambda pid=pid, r=reason, px=exit_px:
                             store.record_exit(pid, r, px))
+                        # If market resolved, mark the outcome too
+                        if "market resolved" in reason:
+                            outcome = 1.0 if "WIN" in reason else 0.0
+                            await loop.run_in_executor(
+                                None, lambda pid=pid, o=outcome, pnl_co=pnl:
+                                store.mark_resolved(pid, o, pnl_pct=pnl_co))
                         log_w.info("Exit #%d %s %s: %s (pnl %+.1f%%)",
                                    pid, direction, p.get("question", "?")[:50],
                                    reason, pnl)
