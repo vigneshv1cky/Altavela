@@ -119,6 +119,31 @@ def _check_cols(keys) -> None:
 # Picks
 # ---------------------------------------------------------------------------
 
+def _decode(row: dict) -> dict:
+    for field in _JSON_FIELDS:
+        if row.get(field) and isinstance(row[field], str):
+            try:
+                row[field] = json.loads(row[field])
+            except Exception:
+                pass
+    return row
+
+
+def get_pick(pick_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM picks WHERE id = ?", (pick_id,)).fetchone()
+    return _decode(dict(row)) if row else None
+
+
+def all_picks(limit: int = 200) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM picks WHERE arm='TEAM' ORDER BY id DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+    return [_decode(dict(r)) for r in rows]
+
+
 def record_pick(row: dict[str, Any]) -> int:
     row = dict(row)
     row.setdefault("ts", _now())
@@ -230,17 +255,6 @@ def markets_debated_since(hours: float) -> dict[str, dict]:
                 "no_price": r["market_no_price"],
             }
     return out
-
-
-def all_picks(limit: int = 50) -> list[dict]:
-    with _connect() as conn:
-        rows = conn.execute(
-            "SELECT id, ts, question, direction, adjusted_score, confidence, "
-            "resolved, outcome, market_yes_price, thesis, verdict, approved "
-            "FROM picks WHERE arm='TEAM' ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
-    return [dict(r) for r in rows]
-
 
 def token_summary() -> dict:
     with _connect() as conn:

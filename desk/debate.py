@@ -82,7 +82,7 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "edge": pick.get("edge_hint", "MISPRICING"),
         "trigger_src": trigger_src,
         "direction": booked_dir,
-        "est_probability": thesis["est_probability"],
+        "est_probability": verdict["adjusted_probability"],  # judge's final estimate, updated after debate
         "score": thesis["score"],
         "adjusted_score": verdict["adjusted_score"],
         "confidence": thesis["score"],

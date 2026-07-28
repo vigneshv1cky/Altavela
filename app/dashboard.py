@@ -88,6 +88,14 @@ def create_app() -> FastAPI:
         rows = store.all_picks(limit=50)
         return rows
 
+    @app.get("/api/pick/{pick_id}")
+    async def api_pick(pick_id: int):
+        """Full pick detail — for the drill-down panel."""
+        row = store.get_pick(pick_id)
+        if not row:
+            return {"error": "not found"}
+        return row
+
     @app.get("/api/tokens")
     async def api_tokens():
         """Token usage summary."""

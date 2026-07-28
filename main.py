@@ -135,9 +135,6 @@ async def _watcher_loop():
                         cur = no_px
 
                     stop = max(entry - max(entry * 0.25, 0.03), 0.01)
-                    # Sanity: stop must be below entry and target must be above entry
-                    if stop >= entry or target <= entry:
-                        continue
 
                     reason = None
                     exit_px = None
