@@ -1,19 +1,10 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowDown, ArrowUp, Loader2, Moon, Monitor, RefreshCw, Sun, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Loader2, Moon, Monitor, Sun, X } from "lucide-react"
 
-interface Ev {
-  type: string; msg?: string; market_id?: string; question?: string; direction?: string
-  score?: number; adjusted_score?: number; approved?: boolean; flipped?: boolean
-  edge_hint?: string; reason?: string; claim?: string; evidence?: string
-  stance?: string; counter_direction?: string; counter?: string
-  concede?: boolean; revised_score?: number; verdict?: string; summary?: string
-  pick_id?: number; est_probability?: number
-}
 interface Pick {
   id: number; question: string; direction: string; score: number
   entry_price: number | null; current_price: number | null; pnl_pct: number | null
@@ -21,40 +12,6 @@ interface Pick {
 interface Stats { total_picks: number; resolved: number; wins: number; win_rate: number | null }
 interface TimelineRow { id: number; direction: string; question: string; resolved: number; outcome: number | null; adjusted_score: number; verdict: string; pnl_return_pct: number | null }
 interface TokenRow { role: string; model: string; input_tok: number; output_tok: number }
-
-const TAGS: Record<string, [string, string]> = {
-  status: ["STATUS", "text-muted-foreground"], scout_pick: ["SCOUT", "text-yellow-400"],
-  gate: ["GATE", "text-muted-foreground"], evidence: ["EVID", "text-muted-foreground"],
-  thesis: ["THESIS", "text-blue-400"], concern: ["CRITIC", "text-red-400"],
-  counter: ["CRITIC", "text-fuchsia-400"], rebuttal: ["REPLY", "text-blue-400"],
-  decision: ["JUDGE", "text-emerald-400"], done: ["DONE", "text-muted-foreground"],
-  debate_start: ["DEBATE", "text-indigo-200"],
-}
-
-function TermLine({ ev }: { ev: Ev }) {
-  const [tag, color] = TAGS[ev.type] ?? ["EVENT", "text-muted-foreground"]
-  let body = ""
-  switch (ev.type) {
-    case "status": body = ev.msg ?? ""; break
-    case "scout_pick": body = `${ev.question?.slice(0, 80)} · ${ev.direction} · ${ev.edge_hint} — ${ev.reason ?? ""}`; break
-    case "gate": body = `${ev.question?.slice(0, 60)} skipped: ${ev.reason ?? ""}`; break
-    case "debate_start": body = `${ev.question?.slice(0, 60)} · ${ev.edge_hint ?? ""}`; break
-    case "evidence": body = `${ev.msg ?? ""}`; break
-    case "thesis": body = `${ev.direction} · prob ${(ev.est_probability ?? 0).toFixed(2)} · score ${ev.score}/100`; break
-    case "concern": body = `${ev.claim ?? ""}`; break
-    case "counter": body = ev.stance === "FLIP" ? `FLIP → ${ev.counter_direction}` : "STAND_ASIDE"; break
-    case "rebuttal": body = `score → ${ev.revised_score}/100 (concede: ${ev.concede ? "yes" : "no"})`; break
-    case "decision": body = `${ev.direction} · ${ev.approved ? "APPROVED" : "thin lean"} · ${ev.verdict} · ${ev.adjusted_score}/100${ev.flipped ? " · REVERSED" : ""}`; break
-    case "done": body = `Run complete — ${ev.msg ?? ""}`; break
-    default: body = JSON.stringify(ev)
-  }
-  return (
-    <div className="text-[13px] leading-relaxed">
-      <span className={`font-semibold ${color}`}>[{tag}]</span>{" "}
-      <span className="text-muted-foreground">{body}</span>
-    </div>
-  )
-}
 
 function LiveCard({ p, onSelect }: { p: Pick; onSelect: (id: number) => void }) {
   const isYes = p.direction === "BUY_YES"
@@ -81,14 +38,12 @@ function LiveCard({ p, onSelect }: { p: Pick; onSelect: (id: number) => void }) 
 
 export default function App() {
   const [running, setRunning] = useState(false)
-  const [feed, setFeed] = useState<Ev[]>([])
   const [stats, setStats] = useState<Stats>({ total_picks: 0, resolved: 0, wins: 0, win_rate: null })
   const [positions, setPositions] = useState<Pick[]>([])
   const [timeline, setTimeline] = useState<TimelineRow[]>([])
   const [tokens, setTokens] = useState<{ usage: TokenRow[]; total_tokens: number }>({ usage: [], total_tokens: 0 })
   const [loaded, setLoaded] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
-  const esRef = useRef<EventSource | null>(null)
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
     try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark" || t === "system") return t as any } catch {}
     return "system"
@@ -114,9 +69,9 @@ export default function App() {
   useEffect(() => { refresh(); const t = setInterval(refresh, 30000); return () => clearInterval(t) }, [])
 
   function run() {
-    setRunning(true); setFeed([])
-    const es = new EventSource("/api/find-markets"); esRef.current = es
-    es.onmessage = (e) => { const ev: Ev = JSON.parse(e.data); if (ev.type === "done") { setRunning(false); es.close(); refresh() } else setFeed(f => [...f, ev]) }
+    setRunning(true)
+    const es = new EventSource("/api/find-markets")
+    es.onmessage = (e) => { const ev = JSON.parse(e.data); if (ev.type === "done") { setRunning(false); es.close(); refresh() } }
     es.onerror = () => { setRunning(false); es.close() }
   }
 
@@ -141,24 +96,6 @@ export default function App() {
       </header>
       <main className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-5 px-5 py-5">
-          <div className="no-scrollbar min-w-0">
-            <Card className="flex min-h-0 flex-col overflow-hidden">
-              <div className="flex items-center gap-2 border-b px-4 py-2 text-[11px] text-muted-foreground"><RefreshCw className="h-3 w-3" /><span>Live Feed{running ? " — scanning markets…" : ""}</span>{running && <Loader2 className="ml-auto h-3 w-3 animate-spin" />}</div>
-              <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-4 py-3">
-                {(running || feed.length > 0) ? (
-                  <div className="space-y-3">
-                    {feed.length > 0 && (() => {
-                      const groups: { question: string; items: Ev[] }[] = []; let cur: Ev[] = []
-                      for (const ev of feed) { if (ev.type === "debate_start") { if (cur.length > 0) groups.push({ question: groups.length > 0 ? groups[groups.length - 1].question : cur[0]?.question ?? "", items: cur }); cur = [ev] } else cur.push(ev) }
-                      if (cur.length > 0) { const ls = [...cur].reverse().find(e => e.type === "debate_start"); groups.push({ question: ls?.question ?? "", items: cur }) }
-                      return <><div className="mb-2 text-xs font-semibold text-indigo-400">Live Feed</div>{groups.map((g, gi) => (<div key={gi}>{gi > 0 && <Separator className="my-2" />}{g.items[0]?.type === "debate_start" && <TermLine ev={g.items[0]} />}<div className="ml-1.5 space-y-0.5 border-l pl-2.5">{g.items.slice(g.items[0]?.type === "debate_start" ? 1 : 0).map((ev, ei) => <TermLine key={ei} ev={ev} />)}</div></div>))}</>
-                    })()}
-                  </div>
-                ) : loaded ? <div className="py-16 text-center text-sm text-muted-foreground"><p>No picks yet</p><p className="mt-1 text-xs">Hit <span className="font-medium text-foreground">Find Markets</span> to run</p></div>
-                : <div className="py-16 text-center text-sm text-muted-foreground">Loading…</div>}
-              </div>
-            </Card>
-          </div>
           <div className="no-scrollbar min-w-0">
             <Tabs defaultValue="live" className="gap-4">
               <TabsList className="h-9 bg-card p-1">
