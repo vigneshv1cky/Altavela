@@ -29,6 +29,15 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
     model_tags = {"researcher": thesis.pop("_downgraded_model", MODEL_MAP["researcher"])}
     yield {"type": "thesis", "market_id": market["id"], "question": question, **thesis}
 
+    # Kill self-contradicting picks — researcher must agree with scout
+    if thesis.get("direction") != direction:
+        log.info("Kill #%s: researcher says %s, scout said %s — contradiction",
+                 market["id"], thesis.get("direction"), direction)
+        yield {"type": "_result", "pick_id": None, "market_id": market["id"],
+               "question": question, "direction": direction, "approved": False,
+               "score": 0, "verdict": "KILLED", "flipped": False, "skipped": True}
+        return
+
     # Critic
     concerns_out = await loop.run_in_executor(
         None, lambda: team.critic_challenge(question, thesis, evidence, decision_id))
