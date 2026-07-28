@@ -118,7 +118,7 @@ SCOUT_MAX_CANDIDATES = int(os.environ.get("SCOUT_MAX_CANDIDATES", "60"))
 FRICTION_BPS_PER_SIDE = 5  # tighter than stock markets
 
 # Watcher take-profit (exit when price moves this % in our favor)
-WATCHER_TAKE_PROFIT_PCT = float(os.environ.get("WATCHER_TAKE_PROFIT_PCT", "10"))
+WATCHER_TAKE_PROFIT_PCT = float(os.environ.get("WATCHER_TAKE_PROFIT_PCT", "5"))
 # Trailing stop — after TP, exit if price drops this % from its peak
 WATCHER_TRAIL_PCT = float(os.environ.get("WATCHER_TRAIL_PCT", "2"))
 # Stale position — exit if price moved < this % after this many hours
