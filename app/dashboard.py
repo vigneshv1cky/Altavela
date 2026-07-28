@@ -11,6 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import StreamingResponse
 
 from altavela.ledger import store
+from altavela.llm import set_token_sink
+
+set_token_sink(store.token_sink)
 
 log = logging.getLogger("altavela.dashboard")
 
