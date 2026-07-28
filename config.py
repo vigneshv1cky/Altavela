@@ -124,6 +124,8 @@ WATCHER_TRAIL_PCT = float(os.environ.get("WATCHER_TRAIL_PCT", "2"))
 # Stale position — exit if price moved < this % after this many hours
 WATCHER_STALE_HOURS = float(os.environ.get("WATCHER_STALE_HOURS", "4"))
 WATCHER_STALE_MOVE_PCT = float(os.environ.get("WATCHER_STALE_MOVE_PCT", "1"))
+# Stop loss — exit if price drops this % from entry
+WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "25"))
 
 # Autorun
 AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.25"))
