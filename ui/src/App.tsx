@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useTheme, type Theme } from "@/lib/theme"
+import { useTheme } from "@/lib/theme"
 import { ArrowDown, ArrowUp, Loader2, Moon, Monitor, Sun, X } from "lucide-react"
 
 interface Ev {
@@ -54,7 +54,7 @@ function TermLine({ ev }: { ev: Ev }) {
   return (
     <div className="text-[13px] leading-relaxed">
       <span className={`font-semibold ${color}`}>[{tag}]</span>{" "}
-      <span className="text-zinc-300">{body}</span>
+      <span className="text-zinc-600 dark:text-zinc-300">{body}</span>
     </div>
   )
 }
@@ -79,15 +79,13 @@ function LiveCard({ p, onSelect }: { p: Pick; onSelect: (id: number) => void }) 
               {pos ? "+" : ""}{p.pnl_pct}%
             </span>
           ) : p.current_price != null ? (
-            <span className="text-zinc-500">${p.current_price}</span>
+            <span className="text-muted-foreground">${p.current_price}</span>
           ) : (
-            <span className="text-zinc-600">pending</span>
+            <span className="text-muted-foreground">pending</span>
           )}
         </span>
       </div>
-      <div className="text-sm text-zinc-800 dark:text-zinc-200 line-clamp-2">
-        {p.question}
-      </div>
+      <div className="text-sm text-foreground line-clamp-2">{p.question}</div>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span>entry {p.entry_price ?? "—"}{p.current_price != null && p.entry_price ? ` · now ${p.current_price}` : ""}</span>
         <span>conf {p.score}</span>
@@ -104,9 +102,9 @@ export default function App() {
   const [timeline, setTimeline] = useState<TimelineRow[]>([])
   const [tokens, setTokens] = useState<{ usage: TokenRow[]; total_tokens: number }>({ usage: [], total_tokens: 0 })
   const [loaded, setLoaded] = useState(false)
-
   const [selected, setSelected] = useState<number | null>(null)
   const [theme, toggleTheme] = useTheme()
+  const esRef = useRef<EventSource | null>(null)
 
   async function refresh() {
     const s = await fetch("/api/stats").then(r => r.json()); setStats(s)
@@ -128,17 +126,15 @@ export default function App() {
     es.onerror = () => { setRunning(false); es.close() }
   }
 
-  const esRef = useRef<EventSource | null>(null)
   const winRate = stats.win_rate
 
   return (
-    <div className="mx-auto flex h-screen max-w-[800px] flex-col p-4">
-      {/* Header */}
+    <div className="mx-auto flex h-screen max-w-[800px] flex-col p-4 bg-background">
       <header className="mb-3 flex shrink-0 items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-3.5 w-3.5 rotate-45 rounded-[3px] bg-indigo-500" />
           <div className="leading-none">
-            <div className="text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-200">Altavela</div>
+            <div className="text-base font-semibold tracking-tight">Altavela</div>
             <div className="mt-0.5 text-[11px] text-muted-foreground">prediction-market research desk</div>
           </div>
         </div>
@@ -146,18 +142,16 @@ export default function App() {
           <div className="hidden text-right sm:flex sm:gap-4 text-xs text-muted-foreground">
             <div><div className="font-semibold">{stats.total_picks}</div><div className="text-[10px]">picks</div></div>
             <div><div className="font-semibold">{stats.resolved}</div><div className="text-[10px]">resolved</div></div>
-            <div><div className={`font-semibold ${winRate != null && winRate > 50 ? "text-emerald-400" : ""}`}>{winRate != null ? `${winRate}%` : "—"}</div><div className="text-[10px]">win rate</div></div>
+            <div><div className={`font-semibold ${winRate != null && winRate > 50 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>{winRate != null ? `${winRate}%` : "—"}</div><div className="text-[10px]">win rate</div></div>
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={run} disabled={running} size="sm" className="gap-1.5">
               {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               {running ? "Scanning…" : "Find Markets"}
             </Button>
-            <button
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
+            <button onClick={toggleTheme} aria-label="Toggle theme"
               title={theme === "dark" ? "Dark" : theme === "light" ? "Light" : "System"}
-              className="grid h-8 w-8 place-items-center rounded-md border border-zinc-200 dark:border-zinc-700 text-muted-foreground transition-colors hover:text-foreground"
+              className="grid h-8 w-8 place-items-center rounded-md border text-muted-foreground transition-colors hover:text-foreground"
             >
               {theme === "dark" ? <Moon className="h-4 w-4" /> : theme === "light" ? <Sun className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
             </button>
@@ -165,7 +159,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Single panel with tabs */}
       <Tabs defaultValue="live" className="flex min-h-0 flex-1 flex-col">
         <TabsList className="h-9 bg-card p-1">
           <TabsTrigger value="live" className="px-3 text-sm data-active:bg-indigo-600 data-active:text-white">Live</TabsTrigger>
@@ -174,12 +167,10 @@ export default function App() {
         </TabsList>
 
         <TabsContent value="live" className="mt-2 min-h-0 flex-1 overflow-y-auto no-scrollbar">
-          {/* Running feed */}
           {running && (
             <Card className="mb-3 overflow-hidden">
               <div className="flex items-center gap-2 border-b px-4 py-2 text-[11px] text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Scanning markets…</span>
+                <Loader2 className="h-3 w-3 animate-spin" /><span>Scanning markets…</span>
               </div>
               <div className="no-scrollbar max-h-[40vh] overflow-y-auto px-4 py-3">
                 <div className="space-y-2">
@@ -210,7 +201,6 @@ export default function App() {
               </div>
             </Card>
           )}
-
           {positions.length === 0 && !running && loaded ? (
             <Card className="p-12 text-center text-sm text-muted-foreground">
               <p>No open positions</p>
@@ -246,11 +236,11 @@ export default function App() {
                       <span className="text-[10px] text-muted-foreground">open</span>
                     )}
                   </div>
-                  <div className="text-sm text-zinc-800 dark:text-zinc-200 line-clamp-2">{t.question}</div>
+                  <div className="text-sm text-foreground line-clamp-2">{t.question}</div>
                   <div className="text-[11px] text-muted-foreground flex justify-between">
                     <span>conf {(t.adjusted_score ?? 0).toFixed(0)} · {t.verdict}</span>
                     {t.pnl_return_pct != null && (
-                      <span className={t.pnl_return_pct >= 0 ? "text-emerald-400" : "text-red-400"}>
+                      <span className={t.pnl_return_pct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
                         {t.pnl_return_pct >= 0 ? "+" : ""}{t.pnl_return_pct}%
                       </span>
                     )}
@@ -292,7 +282,6 @@ function PickSheet({ pickId, onClose }: { pickId: number | null; onClose: () => 
     if (pickId) fetch(`/api/pick/${pickId}`).then(r => r.json()).then(setData)
     else setData(null)
   }, [pickId])
-
   if (!pickId) return null
   const isYes = data?.direction === "BUY_YES"
   const dirColor = isYes ? "text-emerald-400" : "text-red-400"
@@ -301,54 +290,54 @@ function PickSheet({ pickId, onClose }: { pickId: number | null; onClose: () => 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-zinc-700 bg-white dark:bg-zinc-950 shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-zinc-700 px-4 py-3">
+      <div className="relative z-10 flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border bg-background shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b px-4 py-3">
           <div className="min-w-0 text-sm">
             <span className={dirColor}>{isYes ? "YES" : "NO"}</span>
-            <span className="font-bold text-zinc-900 dark:text-zinc-200"> {data?.question}</span>
+            <span className="font-bold"> {data?.question}</span>
           </div>
-          <button onClick={onClose} className="grid h-7 w-7 place-items-center rounded text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200">
+          <button onClick={onClose} className="grid h-7 w-7 place-items-center rounded text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="no-scrollbar flex-1 overflow-y-auto p-4 text-sm leading-relaxed">
-          {!data ? <div className="text-zinc-500">Loading…</div> : (
+          {!data ? <div className="text-muted-foreground">Loading…</div> : (
             <div className="space-y-3">
               <div>
-                <div className="text-zinc-500 mb-1">── The Call ──</div>
+                <div className="text-muted-foreground mb-1">── The Call ──</div>
                 <div>
                   <span className={dirColor}>[{isYes ? "BUY_YES" : "BUY_NO"}]</span>
-                  <span className="text-zinc-600"> · prob {data.est_probability?.toFixed(2)}</span>
-                  <span className="text-zinc-600"> · conf {Math.round(data.adjusted_score ?? data.score)}</span>
-                  {data.verdict && <span className="text-zinc-600"> · {data.verdict}</span>}
+                  <span className="text-muted-foreground"> · prob {data.est_probability?.toFixed(2)}</span>
+                  <span className="text-muted-foreground"> · conf {Math.round(data.adjusted_score ?? data.score)}</span>
+                  {data.verdict && <span className="text-muted-foreground"> · {data.verdict}</span>}
                 </div>
-                <div className="text-zinc-500">
+                <div className="text-muted-foreground">
                   entry: YES ${data.market_yes_price} · NO ${data.market_no_price}
                   {data.resolved && <span className={data.outcome === 1 ? "text-emerald-400" : "text-red-400"}> · {data.outcome === 1 ? "WIN" : "LOSS"}</span>}
                 </div>
               </div>
               {data.triage_reason && (
                 <div>
-                  <div className="text-zinc-500 mb-1">── Why we looked ──</div>
+                  <div className="text-muted-foreground mb-1">── Why we looked ──</div>
                   <span className="text-yellow-400 font-semibold">[SCOUT]</span>
-                  <span className="text-zinc-800 dark:text-zinc-200"> {data.triage_reason}</span>
+                  <span className="text-foreground"> {data.triage_reason}</span>
                 </div>
               )}
               {data.thesis && (
                 <div>
-                  <div className="text-zinc-500 mb-1">── Researcher ──</div>
+                  <div className="text-muted-foreground mb-1">── Researcher ──</div>
                   <span className="text-blue-400 font-semibold">[THESIS]</span>
-                  <span className="text-zinc-800 dark:text-zinc-200"> {data.thesis}</span>
+                  <span className="text-foreground"> {data.thesis}</span>
                 </div>
               )}
               {deb?.concerns?.length > 0 && (
                 <div>
-                  <div className="text-zinc-500 mb-1">── Critic ──</div>
+                  <div className="text-muted-foreground mb-1">── Critic ──</div>
                   {deb.concerns.map((c: any, i: number) => (
                     <div key={i}>
                       <span className="text-red-400 font-semibold">[CRITIC #{i + 1}]</span>
-                      <span className="text-zinc-800 dark:text-zinc-200"> {c.claim}</span>
-                      {c.evidence && <div className="text-zinc-500 ml-4">{c.evidence}</div>}
+                      <span className="text-foreground"> {c.claim}</span>
+                      {c.evidence && <div className="text-muted-foreground ml-4">{c.evidence}</div>}
                     </div>
                   ))}
                   {deb.counter && deb.critic_stance !== "SUPPORT" && (
@@ -360,20 +349,20 @@ function PickSheet({ pickId, onClose }: { pickId: number | null; onClose: () => 
               )}
               {deb?.rebuttal && (
                 <div>
-                  <div className="text-zinc-500 mb-1">── Reply ──</div>
+                  <div className="text-muted-foreground mb-1">── Reply ──</div>
                   <span className="text-blue-400 font-semibold">[REPLY]</span>
-                  <span className="text-zinc-800 dark:text-zinc-200"> {deb.rebuttal.rebuttal}</span>
-                  <div className="text-zinc-500 ml-4 text-xs">
+                  <span className="text-foreground"> {deb.rebuttal.rebuttal}</span>
+                  <div className="text-xs ml-4 text-muted-foreground">
                     score → {deb.rebuttal.revised_score}/100 · conceded: {deb.rebuttal.concede ? "yes" : "no"}
                   </div>
                 </div>
               )}
               {deb?.judge_summary && (
                 <div>
-                  <div className="text-zinc-500 mb-1">── Judge ──</div>
+                  <div className="text-muted-foreground mb-1">── Judge ──</div>
                   <span className="text-emerald-400 font-semibold">[JUDGE]</span>
-                  <span className="text-zinc-800 dark:text-zinc-200"> {deb.judge_summary}</span>
-                  <div className="text-zinc-500 ml-4 text-xs">
+                  <span className="text-foreground"> {deb.judge_summary}</span>
+                  <div className="text-xs ml-4 text-muted-foreground">
                     {deb.flipped && <span className="text-fuchsia-400">reversed · </span>}
                     adj prob {data.est_probability?.toFixed(2)} · score {data.adjusted_score}
                   </div>
