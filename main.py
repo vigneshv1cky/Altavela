@@ -101,6 +101,7 @@ async def _watcher_loop():
     fair value (target) or falls past the stop-loss threshold."""
     from altavela.ingest.polymarket import live_prices
     from altavela.ledger import store
+    from altavela.config import WATCHER_TAKE_PROFIT_PCT
 
     loop = asyncio.get_running_loop()
     log_w = logging.getLogger("altavela.watch")
@@ -125,19 +126,9 @@ async def _watcher_loop():
                     if not entry or entry <= 0:
                         continue
 
-                    # Don't exit positions younger than 5 min — let the market breathe
-                    ts = p.get("ts", "")
-                    if ts:
-                        from datetime import datetime, timezone
-                        try:
-                            age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds()
-                            if age_s < 300:
-                                continue
-                        except (ValueError, TypeError):
-                            pass
-
                     # Target = researcher's estimated fair value
                     # Stop = entry - max(entry * 0.25, 0.03) — 25% or 3 cents max loss
+                    # Take-profit at 10% gain
                     if direction == "BUY_YES":
                         target = min(est_prob, 0.99)
                         cur = yes_px
@@ -145,11 +136,15 @@ async def _watcher_loop():
                         target = min(1.0 - est_prob, 0.99)
                         cur = no_px
 
+                    tp = round(entry * (1 + WATCHER_TAKE_PROFIT_PCT / 100), 4)
                     stop = max(entry - max(entry * 0.25, 0.03), 0.01)
 
                     reason = None
                     exit_px = None
-                    if target > entry and cur >= target:
+                    if cur >= tp:
+                        reason = f"take-profit: price {cur} > {tp} (+{round((cur-entry)/entry*100,1)}%)"
+                        exit_px = cur
+                    elif cur >= target:
                         reason = f"target hit: price {cur} reached est fair value {target}"
                         exit_px = cur
                     elif cur <= stop:

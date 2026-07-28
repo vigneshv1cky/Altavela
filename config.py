@@ -117,6 +117,9 @@ SCOUT_MAX_CANDIDATES = int(os.environ.get("SCOUT_MAX_CANDIDATES", "60"))
 # Friction — Polymarket charges no fees, just spread/slippage
 FRICTION_BPS_PER_SIDE = 5  # tighter than stock markets
 
+# Watcher take-profit (exit when price moves this % in our favor)
+WATCHER_TAKE_PROFIT_PCT = float(os.environ.get("WATCHER_TAKE_PROFIT_PCT", "10"))
+
 # Autorun
 AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.25"))
 AUTORUN_START_ET = os.environ.get("AUTORUN_START_ET", "00:00").strip()
