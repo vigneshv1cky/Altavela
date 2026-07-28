@@ -30,6 +30,8 @@ async def _serve() -> None:
                 n = await loop.run_in_executor(None, grade_due)
                 if n:
                     log.info("Graded %d picks", n)
+                else:
+                    log.debug("Grader: no picks to grade")
             except Exception as exc:
                 log.error("grader error: %s", exc)
             await asyncio.sleep(3600)

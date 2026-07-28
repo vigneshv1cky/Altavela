@@ -19,6 +19,9 @@ log = logging.getLogger("altavela.grader")
 def grade_due() -> int:
     """Grade all unresolved picks. Returns number graded."""
     picks = store.due_for_grading()
+    if not picks:
+        return 0
+    log.info("Grader checking %d unresolved picks…", len(picks))
     graded = 0
     for p in picks:
         mid = p.get("market_id", "")
