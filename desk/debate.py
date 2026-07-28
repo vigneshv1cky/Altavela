@@ -107,19 +107,6 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
         "taken": 1,
     })
 
-    # Paper trading — simulate CLOB fill
-    try:
-        from altavela.broker.paper import place_paper_order
-        entry = prices[0] if booked_dir == "BUY_YES" else prices[1]
-        fill = place_paper_order(
-            pick_id, market, booked_dir, entry,
-            verdict["verdict"], bool(verdict["approved"]))
-        if fill:
-            log.info("Paper fill #%d: $%.2f %s @ $%.4f",
-                     pick_id, fill["size_usd"], booked_dir, fill["fill_price"])
-    except Exception as exc:
-        log.warning("Paper broker error: %s", exc)
-
     yield {
         "type": "_result",
         "pick_id": pick_id,
