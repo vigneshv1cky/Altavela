@@ -1,12 +1,10 @@
 """Evidence gathering — fetches real-world data for prediction-market research.
 
 Sources (all free, no API keys):
-  - Google News RSS — recent articles matching the market question
-  - Wikipedia API — factual background on the topic
+  - DuckDuckGo web search — real search results with snippets
+  - Wikipedia API — factual background + team page extracts
   - Polymarket metadata — market description, resolution source, category
-  - Sports-specific — recent form, head-to-head, betting odds/previews
-
-Follows the AlphaDesk pattern: code fetches facts, agents interpret them.
+  - TheSportsDB — match results for head-to-head data
 """
 
 import json
@@ -15,6 +13,8 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from duckduckgo_search import DDGS
 
 log = logging.getLogger("altavela.evidence")
 
@@ -28,34 +28,22 @@ _SPORTS_TERMS = re.compile(
     r"|itf|atp|wta|grand.?slam|open\b)", re.IGNORECASE)
 
 
-def _search_news(query: str, max_results: int = 6) -> list[str]:
-    """Search Google News RSS for articles matching a query."""
-    url = "https://news.google.com/rss/search?" + urllib.parse.urlencode({
-        "q": query, "hl": "en-US", "ceid": "US:en",
-    })
-    req = urllib.request.Request(url, headers={"User-Agent": "altavela/0.1"})
+def _web_search(query: str, max_results: int = 6) -> list[str]:
+    """Search the web via DuckDuckGo — returns title + snippet."""
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            body = resp.read().decode("utf-8", "replace")
+        with DDGS() as ddgs:
+            results = []
+            for r in ddgs.text(query, max_results=max_results):
+                body = r.get("body", "")
+                title = r.get("title", "")
+                line = title
+                if body:
+                    line += f" — {body[:200]}"
+                results.append(line)
+            return results
     except Exception as exc:
-        log.debug("Google News RSS failed: %s", exc)
+        log.debug("Web search failed: %s", exc)
         return []
-
-    titles = re.findall(r"<title>(.*?)</title>", body)
-    sources = re.findall(r"<source.*?>(.*?)</source>", body)
-
-    results = []
-    for i, t in enumerate(titles):
-        if not t or t.startswith("Google News") or t == "Top stories":
-            continue
-        source = sources[i] if i < len(sources) else ""
-        line = t.strip()
-        if source and source.strip():
-            line += f" — {source.strip()}"
-        results.append(line)
-        if len(results) >= max_results:
-            break
-    return results
 
 
 def _wikipedia_summary(query: str) -> str | None:
@@ -147,18 +135,18 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
     if wiki:
         evidence.append(f"[WIKI] {wiki}")
 
-    # 3. Recent news (Google News RSS)
-    articles = _search_news(search_terms)
+    # 3. Web search (DuckDuckGo — real results, not just RSS headlines)
+    articles = _web_search(search_terms)
     for a in articles:
-        evidence.append(f"[NEWS] {a}")
+        evidence.append(f"[SEARCH] {a}")
 
-    # 4. If no news, try broader tag-based search
-    if len([e for e in evidence if e.startswith("[NEWS]")]) == 0 and market:
+    # 4. If no search results, try broader tag-based query
+    if len([e for e in evidence if e.startswith("[SEARCH]")]) == 0 and market:
         tags = market.get("tags", [])
         if tags:
-            articles = _search_news(" ".join(tags[:3]))
+            articles = _web_search(" ".join(tags[:3]))
             for a in articles:
-                evidence.append(f"[NEWS] {a}")
+                evidence.append(f"[SEARCH] {a}")
 
     # 5. Sports-specific: structured API data, recent form, H2H, odds
     if _SPORTS_TERMS.search(question):
@@ -177,7 +165,7 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
             ("betting odds prediction preview", "[ODDS]"),
         ]:
             query = f"{base} {suffix}"[:250]
-            for a in _search_news(query, max_results=3):
+            for a in _web_search(query, max_results=3):
                 evidence.append(f"{label} {a}")
 
         # Sports Wikipedia: look up team pages for roster/form data

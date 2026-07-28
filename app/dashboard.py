@@ -167,6 +167,10 @@ def create_app() -> FastAPI:
 
                 evidence = await loop.run_in_executor(
                     None, gather_evidence, pick["question"], market)
+                substantive = [e for e in evidence if not e.startswith("[MARKET]")]
+                if not substantive:
+                    yield _ev("status", msg=f"Skipping '{pick['question'][:60]}' — no evidence found")
+                    continue
                 if evidence:
                     yield _ev("evidence", msg=f"{len(evidence)} articles found for '{pick['question'][:60]}'")
 

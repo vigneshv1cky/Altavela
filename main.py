@@ -276,6 +276,12 @@ async def _desk() -> None:
         evidence = await loop.run_in_executor(
             None, gather_evidence, pick["question"], market)
 
+        # Skip if no real evidence found (only [MARKET] metadata isn't enough)
+        substantive = [e for e in evidence if not e.startswith("[MARKET]")]
+        if not substantive:
+            log.info("Skipping: %s — no evidence found", pick["question"][:60])
+            continue
+
         log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
         async for ev in _debate_one(market, pick, evidence):
             t = ev.get("type", "")
