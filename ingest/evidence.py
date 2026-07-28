@@ -76,10 +76,31 @@ def _wikipedia_summary(query: str) -> str | None:
     results = (data.get("query") or {}).get("search") or []
     if results:
         snippet = results[0].get("snippet", "")
-        # Strip HTML tags from the snippet
         snippet = re.sub(r"<[^>]+>", "", snippet)
         if snippet:
             return snippet[:300]
+    return None
+
+
+def _wikipedia_extract(title: str) -> str | None:
+    """Fetch the intro extract of a Wikipedia page by title."""
+    url = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode({
+        "action": "query", "format": "json", "prop": "extracts",
+        "exintro": "1", "explaintext": "1",
+        "titles": title, "origin": "*",
+    })
+    req = urllib.request.Request(url, headers={"User-Agent": "altavela/0.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception as exc:
+        log.debug("Wikipedia extract failed: %s", exc)
+        return None
+    pages = (data.get("query") or {}).get("pages") or {}
+    for _pid, info in pages.items():
+        extract = info.get("extract", "")
+        if extract:
+            return extract[:500]
     return None
 
 
@@ -151,6 +172,19 @@ def gather_evidence(question: str, market: dict | None = None) -> list[str]:
             query = f"{base} {suffix}"[:250]
             for a in _search_news(query, max_results=3):
                 evidence.append(f"{label} {a}")
+
+        # Sports Wikipedia: look up team pages for roster/form data
+        for part in re.split(r"\b(?:vs|versus|vs\.)\b", question, flags=re.IGNORECASE):
+            part = part.strip().rstrip("?")
+            if not part or len(part) < 4:
+                continue
+            # Remove common suffixes like (BO3), - Map 2, etc.
+            name = re.split(r"\s*[\(-]", part)[0].strip()
+            if len(name) < 4:
+                continue
+            extract = _wikipedia_extract(name)
+            if extract:
+                evidence.append(f"[TEAM] {name}: {extract}")
 
     if evidence:
         log.info("Evidence: %d items for '%s'", len(evidence), question[:60])
