@@ -141,6 +141,8 @@ def _register_stream(market_ids: list[str], registered: set[str]) -> None:
             "Stream registered %d tokens for %d markets",
             len(current_map), len(registered))
 
+_profit_exit_markets: set[str] = set()  # module-level: block re-debate after profit
+
 async def _watcher_loop():
     """Watch open positions — three exit triggers, checked every 60s:
     1. Trailing stop — activates at +TAKE_PROFIT_PCT%, trails TRAIL_PCT% below peak
@@ -282,7 +284,9 @@ async def _watcher_loop():
                                    reason, pnl)
                         # Cluster exit: if we took profit on this market, flag it
                         if pnl > 0:
+                            global _profit_exit_markets
                             _exited_markets.add(mid)
+                            _profit_exit_markets.add(mid)
 
                     # Cluster exit: another position on this market just exited with profit
                     if not reason and mid in _exited_markets:
@@ -321,10 +325,16 @@ async def _desk() -> None:
 
     # Filter: skip markets debated recently unless price moved significantly
     recent = store.markets_debated_since(REPICK_COOLDOWN_HOURS)
+    global _profit_exit_markets
     fresh_markets = []
     skipped_cooldown = 0
+    skipped_profit = 0
     for m in markets:
         mid = m.get("id", "")
+        # Never re-enter a market that recently took profit
+        if mid in _profit_exit_markets:
+            skipped_profit += 1
+            continue
         if mid in recent:
             prev = recent[mid]
             prices = m.get("prices", [0.5, 0.5])
@@ -337,9 +347,9 @@ async def _desk() -> None:
                     continue
         fresh_markets.append(m)
 
-    if skipped_cooldown:
-        log.info("Cooldown: %d markets skipped (debated <%.0fh, price move <%.0f%%)",
-                 skipped_cooldown, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT)
+    if skipped_cooldown or skipped_profit:
+        log.info("Cooldown: %d skipped (debated <%.0fh, price move <%.0f%%), %d post-profit blocked",
+                 skipped_cooldown, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT, skipped_profit)
 
     if not fresh_markets:
         log.info("No fresh markets after cooldown filter")
