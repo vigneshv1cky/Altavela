@@ -285,6 +285,14 @@ async def _desk() -> None:
     for pick in picks:
         mid = pick["market_id"]
         market = next((m for m in fresh_markets if m["id"] == mid), {})
+
+        # Only book INFORMATION edge — data shows +14% avg, others lose
+        edge_hint = pick.get("edge_hint", "")
+        if edge_hint != "INFORMATION":
+            log.info("Skipping: %s — edge=%s (only INFORMATION booked)",
+                     pick["question"][:60], edge_hint)
+            continue
+
         if not market:
             continue
 
