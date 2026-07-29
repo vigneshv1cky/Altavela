@@ -20,7 +20,7 @@ TIERS = ["opus", "sonnet", "haiku"]
 MODEL_MAP: dict[str, str] = {
     "enrichment": "haiku",
     "scout": "sonnet",
-    "researcher": "sonnet",
+    "researcher": "opus",
     "critic": "opus",
     "judge": "opus",
     "head": "opus",
