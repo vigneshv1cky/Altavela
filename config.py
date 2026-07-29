@@ -130,7 +130,7 @@ WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "5"))
 WATCHER_INTERVAL_S = int(os.environ.get("WATCHER_INTERVAL_S", "60"))
 
 # Autorun
-AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.25"))
+AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.083"))  # 5 min
 AUTORUN_START_ET = os.environ.get("AUTORUN_START_ET", "00:00").strip()
 AUTORUN_END_ET = os.environ.get("AUTORUN_END_ET", "23:59").strip()
 
