@@ -54,10 +54,12 @@ def create_app() -> FastAPI:
         return store.stats()
 
     @app.get("/api/picks")
-    async def api_picks():
+    async def api_picks(limit: int = 20, offset: int = 0):
         from altavela.ingest.polymarket import live_prices as pm_prices
 
         picks = store.live_picks()
+        total = len(picks)
+        picks = picks[offset:offset + limit]
         mids = list({p["market_id"] for p in picks if p.get("market_id")})
         prices = pm_prices(mids) if mids else {}
 
@@ -84,12 +86,13 @@ def create_app() -> FastAPI:
                 "resolved": bool(p.get("resolved")),
                 "outcome": p.get("outcome"),
             })
-        return result
+        return {"items": result, "total": total}
 
     @app.get("/api/timelines")
-    async def api_timelines(exited_only: str = "1"):
+    async def api_timelines(exited_only: str = "1", limit: int = 20, offset: int = 0):
         """All picks with outcomes — for the track record."""
-        rows = store.all_picks(limit=50, exited_only=exited_only != "0")
+        rows, total = store.all_picks(limit=limit, offset=offset, exited_only=exited_only != "0")
+        return {"items": rows, "total": total}
         return rows
 
     @app.get("/api/pick/{pick_id}")

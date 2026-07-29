@@ -54,6 +54,11 @@ export default function App() {
   const [tokens, setTokens] = useState<{ usage: TokenRow[]; total_tokens: number }>({ usage: [], total_tokens: 0 })
   const [loaded, setLoaded] = useState(false)
   const [selected, setSelected] = useState<number | null>(null)
+  const [tab, setTab] = useState("live")
+  const [liveOffset, setLiveOffset] = useState(0)
+  const [liveTotal, setLiveTotal] = useState(0)
+  const [histOffset, setHistOffset] = useState(0)
+  const [histTotal, setHistTotal] = useState(0)
   const [theme, setTheme] = useState<"light" | "dark" | "system">(() => {
     try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark" || t === "system") return t as any } catch {}
     return "system"
@@ -71,10 +76,22 @@ export default function App() {
 
   async function refresh() {
     const s = await fetch("/api/stats").then(r => r.json()); setStats(s)
-    const p = await fetch("/api/picks").then(r => r.json()); setPositions(p)
-    const t = await fetch("/api/timelines").then(r => r.json()); setTimeline(t)
+    const p = await fetch("/api/picks?limit=20&offset=0").then(r => r.json()); setPositions(p.items); setLiveTotal(p.total); setLiveOffset(0)
+    const t = await fetch("/api/timelines?limit=20&offset=0").then(r => r.json()); setTimeline(t.items); setHistTotal(t.total); setHistOffset(0)
     const tok = await fetch("/api/tokens").then(r => r.json()); setTokens(tok)
     setLoaded(true)
+  }
+  async function loadMoreLive() {
+    const off = liveOffset + 20
+    const p = await fetch(`/api/picks?limit=20&offset=${off}`).then(r => r.json())
+    setPositions(prev => [...prev, ...p.items])
+    setLiveOffset(off)
+  }
+  async function loadMoreHistory() {
+    const off = histOffset + 20
+    const t = await fetch(`/api/timelines?limit=20&offset=${off}`).then(r => r.json())
+    setTimeline(prev => [...prev, ...t.items])
+    setHistOffset(off)
   }
   useEffect(() => { refresh(); const t = setInterval(refresh, 30000); return () => clearInterval(t) }, [])
 
@@ -91,7 +108,7 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <header className="z-30 shrink-0 border-b bg-background/85 backdrop-blur">
         <div className="mx-auto flex max-w-[1200px] items-center gap-4 px-5 py-3">
-          <div className="flex items-center gap-2.5"><div className="h-3.5 w-3.5 rotate-45 rounded-[3px] bg-indigo-500" /><div className="leading-none"><div className="text-sm font-semibold tracking-tight">Altavela</div><div className="mt-0.5 text-[11px] text-muted-foreground">prediction-market research desk</div></div></div>
+          <div className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => { refresh(); setTab("live") }}><div className="h-3.5 w-3.5 rotate-45 rounded-[3px] bg-indigo-500" /><div className="leading-none"><div className="text-sm font-semibold tracking-tight">Altavela</div><div className="mt-0.5 text-[11px] text-muted-foreground">prediction-market research desk</div></div></div>
           <div className={`ml-2 flex items-center gap-1.5 text-xs font-medium ${running ? "text-emerald-500" : "text-muted-foreground"}`}><span className={`h-2 w-2 rounded-full ${running ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/40"}`} />{running ? "running" : "idle"}</div>
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden text-right sm:flex sm:gap-4 text-xs text-muted-foreground">
@@ -107,14 +124,14 @@ export default function App() {
       <main className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-5 px-5 py-5">
           <div className="no-scrollbar min-w-0">
-            <Tabs defaultValue="live" className="gap-4">
+            <Tabs value={tab} onValueChange={setTab} className="gap-4">
               <TabsList className="h-9 bg-card p-1">
                 <TabsTrigger value="live" className="px-3 text-sm data-active:bg-indigo-600 data-active:text-white">Live</TabsTrigger>
                 <TabsTrigger value="track" className="px-3 text-sm data-active:bg-indigo-600 data-active:text-white">History</TabsTrigger>
                 <TabsTrigger value="tokens" className="px-3 text-sm data-active:bg-indigo-600 data-active:text-white">Usage</TabsTrigger>
               </TabsList>
-              <TabsContent value="live">{positions.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No open positions</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{positions.length} open</div>{groupByDate([...positions].sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(p => <LiveCard key={p.id} p={p} onSelect={setSelected} />)}</div></div>)}</div>}</TabsContent>
-              <TabsContent value="track">{timeline.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No picks yet</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{timeline.filter(t => t.resolved).length} resolved · {timeline.length} total</div><Card className={`flex items-center justify-between p-3 ${stats.total_pnl_pct >= 0 ? "border-emerald-500/30" : "border-red-500/30"}`}><span className="text-xs text-muted-foreground">Overall P&amp;L</span><div className="text-right"><span className={`font-mono text-lg font-bold tabular-nums ${stats.total_pnl_pct >= 0 ? "text-emerald-500" : "text-red-500"}`}>{stats.total_pnl_pct >= 0 ? "+" : ""}{stats.total_pnl_pct}%</span><div className="text-[10px] text-muted-foreground">median <span className={stats.median_pnl_pct >= 0 ? "text-emerald-500" : "text-red-500"}>{stats.median_pnl_pct >= 0 ? "+" : ""}{stats.median_pnl_pct}%</span></div></div></Card>{groupByDate([...timeline].sort((a, b) => (b.exit_ts || "").localeCompare(a.exit_ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(t => {
+              <TabsContent value="live">{positions.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No open positions</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{liveTotal} open</div>{groupByDate([...positions].sort((a, b) => (b.ts || "").localeCompare(a.ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(p => <LiveCard key={p.id} p={p} onSelect={setSelected} />)}</div></div>)}{positions.length < liveTotal && <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={loadMoreLive}>Load more</Button>}</div>}</TabsContent>
+              <TabsContent value="track">{timeline.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No picks yet</Card> : <div className="space-y-4"><div className="text-[11px] text-muted-foreground">{timeline.filter(t => t.resolved).length} resolved · {histTotal} total</div><Card className={`flex items-center justify-between p-3 ${stats.total_pnl_pct >= 0 ? "border-emerald-500/30" : "border-red-500/30"}`}><span className="text-xs text-muted-foreground">Overall P&amp;L</span><div className="text-right"><span className={`font-mono text-lg font-bold tabular-nums ${stats.total_pnl_pct >= 0 ? "text-emerald-500" : "text-red-500"}`}>{stats.total_pnl_pct >= 0 ? "+" : ""}{stats.total_pnl_pct}%</span><div className="text-[10px] text-muted-foreground">median <span className={stats.median_pnl_pct >= 0 ? "text-emerald-500" : "text-red-500"}>{stats.median_pnl_pct >= 0 ? "+" : ""}{stats.median_pnl_pct}%</span></div></div></Card>{groupByDate([...timeline].sort((a, b) => (b.exit_ts || "").localeCompare(a.exit_ts || ""))).map(g => <div key={g.label}><div className="mb-2 text-xs font-semibold text-muted-foreground">{g.label}</div><div className="space-y-2">{g.items.map(t => {
                   const exited = !!t.exit_ts
                   const entry = t.direction === "BUY_YES" ? t.market_yes_price : t.market_no_price
                   const exitPnl = (exited && t.exit_price != null && entry && entry > 0)
@@ -140,7 +157,7 @@ export default function App() {
                       {pnl != null && <span className={`shrink-0 ${pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>{pnl >= 0 ? "+" : ""}{pnl.toFixed(1)}%</span>}
                     </div>
                   </Card>
-                })}</div></div>)}</div>}</TabsContent>
+                })}</div></div>)}{timeline.length < histTotal && <Button variant="ghost" size="sm" className="w-full text-xs text-muted-foreground" onClick={loadMoreHistory}>Load more</Button>}</div>}</TabsContent>
               <TabsContent value="tokens">{tokens.usage.length === 0 ? <Card className="p-8 text-center text-sm text-muted-foreground">No usage yet</Card> : <div className="space-y-2"><div className="text-[11px] text-muted-foreground">Total: {(tokens.total_tokens / 1000).toFixed(0)}k</div>{tokens.usage.map((t, i) => <Card key={i} className="flex items-center justify-between px-3 py-2 text-sm"><span className="font-medium">{t.role}</span><span className="text-muted-foreground">{t.model} · {((t.input_tok + t.output_tok) / 1000).toFixed(0)}k</span></Card>)}</div>}</TabsContent>
             </Tabs>
           </div>

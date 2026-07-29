@@ -135,14 +135,17 @@ def get_pick(pick_id: int) -> dict | None:
     return _decode(dict(row)) if row else None
 
 
-def all_picks(limit: int = 200, exited_only: bool = False) -> list[dict]:
+def all_picks(limit: int = 200, offset: int = 0, exited_only: bool = False) -> tuple[list[dict], int]:
     with _connect() as conn:
         extra = " AND exit_ts IS NOT NULL" if exited_only else ""
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM picks WHERE arm='TEAM'{extra}"
+        ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM picks WHERE arm='TEAM'{extra} ORDER BY id DESC LIMIT ?",
-            (limit,)
+            f"SELECT * FROM picks WHERE arm='TEAM'{extra} ORDER BY id DESC LIMIT ? OFFSET ?",
+            (limit, offset)
         ).fetchall()
-    return [_decode(dict(r)) for r in rows]
+    return [_decode(dict(r)) for r in rows], total
 
 
 def record_pick(row: dict[str, Any]) -> int:
