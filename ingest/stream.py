@@ -95,6 +95,13 @@ def _connect() -> None:
         except json.JSONDecodeError:
             continue
 
+        # Subscription confirmation comes as a list
+        if isinstance(msg, list):
+            continue
+
+        if not isinstance(msg, dict):
+            continue
+
         event_type = msg.get("event_type", "")
 
         # Best bid/ask — gives us real-time mid-market prices
