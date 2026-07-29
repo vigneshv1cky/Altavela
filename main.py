@@ -175,6 +175,7 @@ async def _watcher_loop():
     while True:
         try:
             picks = await loop.run_in_executor(None, store.live_picks)
+            _exited_markets.clear()  # always clean — even if no picks
             if picks:
                 mids = list({p["market_id"] for p in picks if p.get("market_id")})
                 # Register new markets with the stream
@@ -293,8 +294,7 @@ async def _watcher_loop():
                             _exited_markets.add(mid)
                             _profit_exit_markets[mid] = direction
 
-            # Clean up: clear exited markers and stale trail entries
-            _exited_markets.clear()
+            # Clean up stale trail entries for picks that no longer exist
             live_ids = {p["id"] for p in picks}
             for pid in list(_trail):
                 if pid not in live_ids:
