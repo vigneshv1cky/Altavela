@@ -146,10 +146,11 @@ def fetch_markets(
 
 
 def quality_filter(markets: list[dict]) -> list[dict]:
-    """Remove unprocessable markets: non-binary, extreme prices."""
+    """Remove unprocessable markets: non-binary, extreme prices, no CLOB tokens."""
     filtered = []
     dropped_nonbinary = 0
     dropped_extreme = 0
+    dropped_no_clob = 0
 
     for m in markets:
         outcomes = m.get("outcomes", [])
@@ -164,11 +165,16 @@ def quality_filter(markets: list[dict]) -> list[dict]:
         if yes_px < 0.03 or yes_px > 0.97:
             dropped_extreme += 1
             continue
+        # Only trade CLOB-tokenized markets — avoid non-streaming gap risk
+        clob_ids = m.get("clobTokenIds") or m.get("clob_token_ids") or []
+        if len(clob_ids) < 2:
+            dropped_no_clob += 1
+            continue
         filtered.append(m)
 
-    if dropped_nonbinary or dropped_extreme:
-        log.info("Quality filter: %d non-binary dropped, %d extreme-price dropped, %d passed",
-                 dropped_nonbinary, dropped_extreme, len(filtered))
+    if dropped_nonbinary or dropped_extreme or dropped_no_clob:
+        log.info("Quality filter: %d non-binary, %d extreme-price, %d no-CLOB dropped, %d passed",
+                 dropped_nonbinary, dropped_extreme, dropped_no_clob, len(filtered))
     return filtered
 
 
