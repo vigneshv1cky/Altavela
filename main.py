@@ -153,12 +153,15 @@ async def _watcher_loop():
     from altavela.ingest.polymarket import live_prices, market_detail
     from altavela.ledger import store
     from altavela.config import WATCHER_TAKE_PROFIT_PCT, WATCHER_TRAIL_PCT, WATCHER_STALE_HOURS, WATCHER_STALE_MOVE_PCT, WATCHER_STOP_PCT, WATCHER_INTERVAL_S
+    import time
 
     loop = asyncio.get_running_loop()
     log_w = logging.getLogger("altavela.watch")
 
     _trail: dict[int, float] = {}
     _registered: set[str] = set()
+    _poll_cache: dict[str, tuple[float, float, float]] = {}  # mid -> (ts, yes_px, no_px)
+    _POLL_INTERVAL = 5  # seconds between API polls for non-streamed markets
     _exited_markets: set[str] = set()  # markets where a position just exited profitably  # market_ids already in the stream
 
     # Try to use streaming for real-time prices
@@ -184,11 +187,20 @@ async def _watcher_loop():
                     if new_mids:
                         _register_stream(new_mids, _registered)
                     prices = stream_prices(mids)
-                    # Fall back to API for markets not in stream yet
-                    missing = [m for m in mids if m not in prices]
-                    if missing:
-                        api_prices = await loop.run_in_executor(None, live_prices, missing)
+                    # Non-streamed markets: poll API every POLL_INTERVAL seconds
+                    now_sec = time.time()
+                    stale_poll = [m for m in mids if m not in prices and
+                                  (m not in _poll_cache or now_sec - _poll_cache[m][0] >= _POLL_INTERVAL)]
+                    if stale_poll:
+                        api_prices = await loop.run_in_executor(None, live_prices, stale_poll)
                         prices.update(api_prices)
+                        for m, px in api_prices.items():
+                            _poll_cache[m] = (now_sec, px[0], px[1])
+                    # Still missing: use cached values
+                    for m in mids:
+                        if m not in prices and m in _poll_cache:
+                            _, y, n = _poll_cache[m]
+                            prices[m] = (y, n)
                 else:
                     prices = await loop.run_in_executor(None, live_prices, mids) if mids else {}
 
