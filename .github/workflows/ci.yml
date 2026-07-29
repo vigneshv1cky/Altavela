@@ -53,7 +53,7 @@ jobs:
       - name: Build UI
         run: cd ui && pnpm install && pnpm build
       - name: Deploy to VM
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GCP_VM_IP }}
           username: vignesh
@@ -71,7 +71,7 @@ jobs:
             echo "Backend deployed — altavela restarted"
             sudo journalctl -u altavela --no-pager -n 3
       - name: Deploy UI
-        uses: appleboy/scp-action@v0
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.GCP_VM_IP }}
           username: vignesh
@@ -81,7 +81,7 @@ jobs:
           strip_components: 1
           rm: true
       - name: Reload UI
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GCP_VM_IP }}
           username: vignesh
