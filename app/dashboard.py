@@ -128,7 +128,7 @@ def create_app() -> FastAPI:
                 return f"data: {_json.dumps(d, default=str)}\n\n"
 
             yield _ev("status", msg="Fetching active prediction markets…")
-            markets = await loop.run_in_executor(None, lambda: fetch_markets(limit=50, min_volume=10000))
+            markets = await loop.run_in_executor(None, lambda: fetch_markets(limit=200, min_volume=10000))
             if not markets:
                 yield _ev("done", msg="No active markets found")
                 return

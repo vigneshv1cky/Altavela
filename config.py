@@ -135,8 +135,8 @@ AUTORUN_START_ET = os.environ.get("AUTORUN_START_ET", "00:00").strip()
 AUTORUN_END_ET = os.environ.get("AUTORUN_END_ET", "23:59").strip()
 
 # Don't re-debate the same market within this many hours unless price moved > threshold
-REPICK_COOLDOWN_HOURS = float(os.environ.get("REPICK_COOLDOWN_HOURS", "6"))
-REPICK_MIN_PRICE_MOVE_PCT = float(os.environ.get("REPICK_MIN_PRICE_MOVE_PCT", "5"))
+REPICK_COOLDOWN_HOURS = float(os.environ.get("REPICK_COOLDOWN_HOURS", "2"))
+REPICK_MIN_PRICE_MOVE_PCT = float(os.environ.get("REPICK_MIN_PRICE_MOVE_PCT", "3"))
 
 # Web dashboard
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
