@@ -15,7 +15,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: PYTHONPATH=. python -c "from altavela.config import MODEL_MAP, MODEL_PROVIDER; from altavela.llm import LLMError; from altavela.ledger.store import init as store_init; store_init(); print('OK:', MODEL_PROVIDER)"
+      - run: ln -sf . altavela && python -c "from altavela.config import MODEL_MAP, MODEL_PROVIDER; from altavela.llm import LLMError; from altavela.ledger.store import init as store_init; store_init(); print('OK:', MODEL_PROVIDER)"
 
   frontend:
     runs-on: ubuntu-latest
