@@ -4,3 +4,4 @@ __pycache__/
 *.db
 node_modules/
 app/static/
+.DS_Store
