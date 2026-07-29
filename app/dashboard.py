@@ -103,6 +103,11 @@ def create_app() -> FastAPI:
             return {"error": "not found"}
         return row
 
+    @app.get("/api/rate-limits")
+    async def api_rate_limits():
+        from altavela.llm import rate_limit_stats
+        return rate_limit_stats()
+
     @app.get("/api/tokens")
     async def api_tokens():
         """Token usage summary."""
