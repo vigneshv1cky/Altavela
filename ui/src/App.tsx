@@ -92,7 +92,7 @@ export default function App() {
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <header className="z-30 shrink-0 border-b bg-background/85 backdrop-blur">
         <div className="mx-auto flex max-w-[1200px] items-center gap-4 px-5 py-3">
-          <div className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => { refresh(); setTab("live") }}><div className="h-3.5 w-3.5 rotate-45 rounded-[3px] bg-indigo-500" /><div className="leading-none"><div className="text-sm font-semibold tracking-tight">Altavela</div><div className="mt-0.5 text-[11px] text-muted-foreground">prediction-market research desk</div></div></div>
+          <div className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => { refresh(); setTab("live") }}><div className="h-3.5 w-3.5 rotate-45 rounded-[3px] bg-indigo-500" /><div className="leading-none"><div className="text-sm font-semibold tracking-tight">Altavela</div><div className="mt-0.5 text-[11px] text-muted-foreground">signal-driven prediction desk</div></div></div>
           <div className={`ml-2 flex items-center gap-1.5 text-xs font-medium ${running ? "text-emerald-500" : "text-muted-foreground"}`}><span className={`h-2 w-2 rounded-full ${running ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/40"}`} />{running ? "running" : "idle"}</div>
           <div className="ml-auto flex items-center gap-4">
             <div className="hidden text-right sm:flex sm:gap-4 text-xs text-muted-foreground">
@@ -156,13 +156,41 @@ function PickSheet({ pickId, onClose }: { pickId: number | null; onClose: () => 
   const [data, setData] = useState<any>(null)
   useEffect(() => { if (pickId) fetch(`/api/pick/${pickId}`).then(r => r.json()).then(setData); else setData(null) }, [pickId])
   if (!pickId) return null
-  const isYes = data?.direction === "BUY_YES"; const dirColor = isYes ? "text-emerald-400" : "text-red-400"; const deb = data?.debate
+  const isYes = data?.direction === "BUY_YES"
+  const dirColor = isYes ? "text-emerald-400" : "text-red-400"
+  const deb = data?.debate
+  const isSignal = deb?.method === "signal" || data?.edge === "MATH"
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg border bg-background shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b px-4 py-3 text-sm"><span className={dirColor}>{isYes ? "YES" : "NO"}</span><span className="font-bold"> {data?.question}</span><button onClick={onClose} className="grid h-7 w-7 place-items-center rounded text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button></div>
-        <div className="no-scrollbar flex-1 overflow-y-auto p-4 text-sm leading-relaxed">{!data ? <div className="text-muted-foreground">Loading…</div> : (<div className="space-y-3"><div><div className="text-muted-foreground mb-1">── The Call ──</div><span className={`font-semibold ${isYes ? "text-emerald-400" : "text-red-400"}`}>[{isYes ? "BUY_YES" : "BUY_NO"}]</span><span className="text-muted-foreground"> · prob {data.est_probability?.toFixed(2)} · conf {Math.round(data.adjusted_score ?? data.score)}</span>{data.verdict && <span className="text-muted-foreground"> · {data.verdict}</span>}<div className="text-muted-foreground">entry: YES ${data.market_yes_price} · NO ${data.market_no_price}{data.resolved && <span className={data.outcome === 1 ? "text-emerald-400" : "text-red-400"}> · {data.outcome === 1 ? "WIN" : "LOSS"}</span>}{data.exit_ts && !data.resolved && (() => { const e = data.direction === "BUY_YES" ? data.market_yes_price : data.market_no_price; const ep = data.exit_price; const ePnl = e && ep ? ((ep - e) / e * 100) : null; return <span className="text-orange-400"> · exited @ ${ep}{ePnl != null && ` (${ePnl >= 0 ? "+" : ""}${ePnl.toFixed(1)}%)`}</span> })()}</div></div>{data.exit_ts && !data.resolved && <div><div className="text-muted-foreground mb-1">── Exit ──</div><span className="text-orange-400 font-semibold">[EXIT]</span><span> {data.exit_reason ?? "No reason recorded"}</span></div>}{data.triage_reason && <div><div className="text-muted-foreground mb-1">── Why we looked ──</div><span className="text-indigo-400 font-semibold">[SCOUT]</span><span> {data.triage_reason}</span></div>}{data.thesis && <div><div className="text-muted-foreground mb-1">── Researcher ──</div><span className="text-blue-400 font-semibold">[THESIS]</span><span> {data.thesis}</span></div>}{deb?.concerns?.length > 0 && <div><div className="text-muted-foreground mb-1">── Critic ──</div>{deb.concerns.map((c: any, i: number) => <div key={i}><span className="text-red-400 font-semibold">[CRITIC #{i + 1}]</span><span> {c.claim}</span>{c.evidence && <div className="text-muted-foreground ml-4">{c.evidence}</div>}</div>)}{deb.counter && deb.critic_stance !== "SUPPORT" && <div className="text-fuchsia-400 text-xs mt-1">{deb.critic_stance === "FLIP" ? `→ ${deb.counter_direction}` : "STAND_ASIDE"} · {deb.counter}</div>}</div>}{deb?.rebuttal && <div><div className="text-muted-foreground mb-1">── Reply ──</div><span className="text-blue-400 font-semibold">[REPLY]</span><span> {deb.rebuttal.rebuttal}</span><div className="text-xs ml-4 text-muted-foreground">score → {deb.rebuttal.revised_score}/100 · conceded: {deb.rebuttal.concede ? "yes" : "no"}</div></div>}{deb?.judge_summary && <div><div className="text-muted-foreground mb-1">── Judge ──</div><span className="text-emerald-400 font-semibold">[JUDGE]</span><span> {deb.judge_summary}</span>{data.verdict && <span className="text-muted-foreground"> · {data.verdict}</span>}{deb.flipped ? <span className="text-fuchsia-400"> · reversed</span> : ""}</div>}</div>)}</div>
+        <div className="no-scrollbar flex-1 overflow-y-auto p-4 text-sm leading-relaxed">
+          {!data ? <div className="text-muted-foreground">Loading…</div> : (
+            <div className="space-y-3">
+              <div>
+                <div className="text-muted-foreground mb-1">── The Call ──</div>
+                <span className={`font-semibold ${isYes ? "text-emerald-400" : "text-red-400"}`}>[{isYes ? "BUY_YES" : "BUY_NO"}]</span>
+                <span className="text-muted-foreground"> · prob {data.est_probability?.toFixed(2)} · conf {Math.round(data.adjusted_score ?? data.score)}</span>
+                {data.verdict && <span className="text-muted-foreground"> · {data.verdict}</span>}
+                {isSignal && <span className="text-indigo-400"> · MATH SIGNAL</span>}
+                <div className="text-muted-foreground">
+                  entry: YES ${data.market_yes_price} · NO ${data.market_no_price}
+                  {data.resolved && <span className={data.outcome === 1 ? "text-emerald-400" : "text-red-400"}> · {data.outcome === 1 ? "WIN" : "LOSS"}</span>}
+                  {data.exit_ts && !data.resolved && (() => { const e = data.direction === "BUY_YES" ? data.market_yes_price : data.market_no_price; const ep = data.exit_price; const ePnl = e && ep ? ((ep - e) / e * 100) : null; return <span className="text-orange-400"> · exited @ ${ep}{ePnl != null && ` (${ePnl >= 0 ? "+" : ""}${ePnl.toFixed(1)}%)`}</span> })()}
+                </div>
+              </div>
+              {data.exit_ts && !data.resolved && <div><div className="text-muted-foreground mb-1">── Exit ──</div><span className="text-orange-400 font-semibold">[EXIT]</span><span> {data.exit_reason ?? "No reason recorded"}</span></div>}
+              {data.triage_reason && <div><div className="text-muted-foreground mb-1">{isSignal ? "── Signal ──" : "── Why we looked ──"}</div><span className="text-indigo-400 font-semibold">{isSignal ? "[SIGNAL]" : "[SCOUT]"}</span><span> {data.triage_reason}</span></div>}
+              {data.thesis && <div><div className="text-muted-foreground mb-1">{isSignal ? "── Sanity Check ──" : "── Researcher ──"}</div><span className="text-blue-400 font-semibold">{isSignal ? "[SANITY]" : "[THESIS]"}</span><span> {data.thesis}</span></div>}
+              {isSignal && deb?.sanity && <div className="text-[11px] ml-4 text-muted-foreground">signal score: {deb.score?.toFixed(1)} · sanity: {deb.sanity}</div>}
+              {!isSignal && deb?.concerns?.length > 0 && <div><div className="text-muted-foreground mb-1">── Critic ──</div>{deb.concerns.map((c: any, i: number) => <div key={i}><span className="text-red-400 font-semibold">[CRITIC #{i + 1}]</span><span> {c.claim}</span>{c.evidence && <div className="text-muted-foreground ml-4">{c.evidence}</div>}</div>)}{deb.counter && deb.critic_stance !== "SUPPORT" && <div className="text-fuchsia-400 text-xs mt-1">{deb.critic_stance === "FLIP" ? `→ ${deb.counter_direction}` : "STAND_ASIDE"} · {deb.counter}</div>}</div>}
+              {!isSignal && deb?.rebuttal && <div><div className="text-muted-foreground mb-1">── Reply ──</div><span className="text-blue-400 font-semibold">[REPLY]</span><span> {deb.rebuttal.rebuttal}</span><div className="text-xs ml-4 text-muted-foreground">score → {deb.rebuttal.revised_score}/100 · conceded: {deb.rebuttal.concede ? "yes" : "no"}</div></div>}
+              {!isSignal && deb?.judge_summary && <div><div className="text-muted-foreground mb-1">── Judge ──</div><span className="text-emerald-400 font-semibold">[JUDGE]</span><span> {deb.judge_summary}</span>{data.verdict && <span className="text-muted-foreground"> · {data.verdict}</span>}{deb.flipped ? <span className="text-fuchsia-400"> · reversed</span> : ""}</div>}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
