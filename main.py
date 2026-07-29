@@ -99,6 +99,37 @@ async def _serve() -> None:
     await asyncio.gather(_grader_loop(), _autorun_loop(), _watcher_loop(), server.serve())
 
 
+def _register_stream(market_ids: list[str], registered: set[str]) -> None:
+    """Look up CLOB token IDs for new markets and add them to the stream."""
+    from altavela.ingest.polymarket import market_detail
+    from altavela.ingest.stream import start_stream, _token_map
+
+    if not _token_map:  # First time — start the stream
+        start_stream({})
+
+    token_map = dict(_token_map)
+    for mid in market_ids:
+        if mid in registered:
+            continue
+        try:
+            detail = market_detail(mid)
+        except Exception:
+            continue
+        if not detail:
+            continue
+        clob_ids = detail.get("clobTokenIds") or detail.get("clob_token_ids") or []
+        if len(clob_ids) >= 2:
+            token_map[clob_ids[0]] = {"market_id": mid, "side": "yes"}
+            token_map[clob_ids[1]] = {"market_id": mid, "side": "no"}
+            registered.add(mid)
+    if token_map != _token_map:
+        _token_map.clear()
+        _token_map.update(token_map)
+        # Re-subscribe with updated token list
+        start_stream(dict(_token_map))
+        logging.getLogger("altavela.watch").info("Stream registered %d tokens for %d markets",
+                                                  len(_token_map), len(registered))
+
 async def _watcher_loop():
     """Watch open positions — three exit triggers, checked every 60s:
     1. Trailing stop — activates at +TAKE_PROFIT_PCT%, trails TRAIL_PCT% below peak
@@ -106,21 +137,45 @@ async def _watcher_loop():
     3. Stale exit — 4h+ open with <1% movement
     4. Market resolved — YES ≤0.001 or ≥0.999 → WIN/LOSS stamped
     5. Pre-game — sports markets 30min before kickoff"""
-    from altavela.ingest.polymarket import live_prices
+    from altavela.ingest.polymarket import live_prices, market_detail
     from altavela.ledger import store
     from altavela.config import WATCHER_TAKE_PROFIT_PCT, WATCHER_TRAIL_PCT, WATCHER_STALE_HOURS, WATCHER_STALE_MOVE_PCT, WATCHER_STOP_PCT, WATCHER_INTERVAL_S
 
     loop = asyncio.get_running_loop()
     log_w = logging.getLogger("altavela.watch")
 
-    _trail: dict[int, float] = {}  # pick_id -> highest price seen (trailing)
+    _trail: dict[int, float] = {}
+    _registered: set[str] = set()  # market_ids already in the stream
+
+    # Try to use streaming for real-time prices
+    _use_stream = False
+    stream_prices = None
+    try:
+        from altavela.ingest.stream import get_prices as _stream_get_prices, start_stream
+        stream_prices = _stream_get_prices
+        _use_stream = True
+        log_w.info("Using WebSocket streaming for live prices")
+    except ImportError:
+        log_w.info("WebSocket streaming not available — using API polling")
 
     while True:
         try:
             picks = await loop.run_in_executor(None, store.live_picks)
             if picks:
                 mids = list({p["market_id"] for p in picks if p.get("market_id")})
-                prices = await loop.run_in_executor(None, live_prices, mids) if mids else {}
+                # Register new markets with the stream
+                if _use_stream:
+                    new_mids = [m for m in mids if m not in _registered]
+                    if new_mids:
+                        _register_stream(new_mids, _registered)
+                    prices = stream_prices(mids)
+                    # Fall back to API for markets not in stream yet
+                    missing = [m for m in mids if m not in prices]
+                    if missing:
+                        api_prices = await loop.run_in_executor(None, live_prices, missing)
+                        prices.update(api_prices)
+                else:
+                    prices = await loop.run_in_executor(None, live_prices, mids) if mids else {}
 
                 for p in picks:
                     pid = p["id"]
