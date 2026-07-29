@@ -156,7 +156,8 @@ async def _watcher_loop():
     log_w = logging.getLogger("altavela.watch")
 
     _trail: dict[int, float] = {}
-    _registered: set[str] = set()  # market_ids already in the stream
+    _registered: set[str] = set()
+    _exited_markets: set[str] = set()  # markets where a position just exited profitably  # market_ids already in the stream
 
     # Try to use streaming for real-time prices
     _use_stream = False
@@ -279,6 +280,14 @@ async def _watcher_loop():
                         log_w.info("Exit #%d %s %s: %s (pnl %+.1f%%)",
                                    pid, direction, p.get("question", "?")[:50],
                                    reason, pnl)
+                        # Cluster exit: if we took profit on this market, flag it
+                        if pnl > 0:
+                            _exited_markets.add(mid)
+
+                    # Cluster exit: another position on this market just exited with profit
+                    if not reason and mid in _exited_markets:
+                        reason = f"cluster exit: market {mid} exited profitably"
+                        exit_px = cur
             # Clean up stale trail entries for picks that no longer exist
             live_ids = {p["id"] for p in picks}
             for pid in list(_trail):
