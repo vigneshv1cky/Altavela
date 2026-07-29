@@ -141,7 +141,7 @@ def _register_stream(market_ids: list[str], registered: set[str]) -> None:
             "Stream registered %d tokens for %d markets",
             len(current_map), len(registered))
 
-_profit_exit_markets: dict[str, str] = {}  # mid -> direction that exited profitably (block same dir)
+_profit_exit_markets: dict[str, str] = {}  # mid -> direction exited profitably
 
 async def _watcher_loop():
     """Watch open positions — three exit triggers, checked every 60s:
@@ -309,6 +309,7 @@ async def _desk() -> None:
     from altavela.ingest.polymarket import fetch_markets, quality_filter
     from altavela.desk.scout import run_scout
     from altavela.ledger import store
+    import time
 
     log = logging.getLogger("altavela.desk")
 
