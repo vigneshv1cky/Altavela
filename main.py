@@ -66,8 +66,9 @@ async def _serve() -> None:
                 # The old +1 always pointed to the future slot, so the autorun never fired.
                 window_start = now.replace(hour=s_h, minute=s_m, second=0, microsecond=0)
                 mins_since_start = (now - window_start).total_seconds() / 60
-                elapsed = int(mins_since_start) // int(AUTORUN_INTERVAL_HOURS * 60)
-                current_slot = window_start + timedelta(hours=elapsed * AUTORUN_INTERVAL_HOURS)
+                interval_min = AUTORUN_INTERVAL_HOURS * 60
+                elapsed = int(mins_since_start / interval_min)
+                current_slot = window_start + timedelta(minutes=elapsed * interval_min)
 
                 if in_window and not running and now >= current_slot:
                     # Restart-safe: check if THIS slot already ran
@@ -76,8 +77,8 @@ async def _serve() -> None:
                     if lt:
                         try:
                             last_dt = datetime.fromisoformat(lt).astimezone(ET)
-                            last_slot = last_dt.replace(minute=int(last_dt.minute // int(AUTORUN_INTERVAL_HOURS * 60)) * int(AUTORUN_INTERVAL_HOURS * 60),
-                                                        second=0, microsecond=0)
+                            mins = (last_dt - window_start).total_seconds() / 60
+                            last_slot = window_start + timedelta(minutes=int(mins / interval_min) * interval_min)
                         except (ValueError, TypeError):
                             pass
                     if last_slot is None or last_slot < current_slot:
