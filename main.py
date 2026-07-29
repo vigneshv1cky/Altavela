@@ -141,7 +141,7 @@ def _register_stream(market_ids: list[str], registered: set[str]) -> None:
             "Stream registered %d tokens for %d markets",
             len(current_map), len(registered))
 
-_profit_exit_markets: set[str] = set()  # module-level: block re-debate after profit
+_profit_exit_markets: dict[str, str] = {}  # mid -> direction that exited profitably (block same dir)
 
 async def _watcher_loop():
     """Watch open positions — three exit triggers, checked every 60s:
@@ -286,7 +286,7 @@ async def _watcher_loop():
                         if pnl > 0:
                             global _profit_exit_markets
                             _exited_markets.add(mid)
-                            _profit_exit_markets.add(mid)
+                            _profit_exit_markets[mid] = direction
 
                     # Cluster exit: another position on this market just exited with profit
                     if not reason and mid in _exited_markets:
@@ -328,13 +328,8 @@ async def _desk() -> None:
     global _profit_exit_markets
     fresh_markets = []
     skipped_cooldown = 0
-    skipped_profit = 0
     for m in markets:
         mid = m.get("id", "")
-        # Never re-enter a market that recently took profit
-        if mid in _profit_exit_markets:
-            skipped_profit += 1
-            continue
         if mid in recent:
             prev = recent[mid]
             prices = m.get("prices", [0.5, 0.5])
@@ -347,9 +342,9 @@ async def _desk() -> None:
                     continue
         fresh_markets.append(m)
 
-    if skipped_cooldown or skipped_profit:
-        log.info("Cooldown: %d skipped (debated <%.0fh, price move <%.0f%%), %d post-profit blocked",
-                 skipped_cooldown, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT, skipped_profit)
+    if skipped_cooldown:
+        log.info("Cooldown: %d markets skipped (debated <%.0fh, price move <%.0f%%)",
+                 skipped_cooldown, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT)
 
     if not fresh_markets:
         log.info("No fresh markets after cooldown filter")
@@ -373,6 +368,11 @@ async def _desk() -> None:
     for pick in picks:
         try:
             mid = pick["market_id"]
+            # Block same-direction re-entry after profit — allow reverse
+            profit_dir = _profit_exit_markets.get(mid, "")
+            if profit_dir and profit_dir == pick.get("direction", ""):
+                log.info("Skipping: %s — post-profit block on %s", pick["question"][:60], profit_dir)
+                continue
             market = next((m for m in fresh_markets if m["id"] == mid), {})
             if not market:
                 continue
