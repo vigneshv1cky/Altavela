@@ -388,6 +388,14 @@ async def _desk() -> None:
             if profit_dir and profit_dir == pick.get("direction", ""):
                 log.info("Skipping: %s — post-profit block on %s", pick["question"][:60], profit_dir)
                 continue
+            # Block re-entry: don't open same-direction position on a market
+            # that already has an open position in that direction
+            existing = store.open_direction(mid, pick.get("direction", ""))
+            if existing:
+                log.info("Skipping: %s — already open %s on this market",
+                         pick["question"][:60], pick.get("direction"))
+                continue
+
             market = next((m for m in fresh_markets if m["id"] == mid), {})
             if not market:
                 continue

@@ -181,7 +181,15 @@ def due_for_grading(limit: int = 100) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def live_picks() -> list[dict]:
+def open_direction(market_id: str, direction: str) -> bool:
+    """Check if there's already an open position in the same direction on this market."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM picks WHERE market_id=? AND direction=? AND arm='TEAM'"
+            " AND taken=1 AND resolved=0 AND exit_ts IS NULL",
+            (market_id, direction)
+        ).fetchone()
+    return row[0] > 0 if row else False
     with _connect() as conn:
         rows = conn.execute(
             "SELECT * FROM picks WHERE taken=1 AND resolved=0 AND exit_ts IS NULL"
