@@ -14,15 +14,11 @@ log = logging.getLogger("altavela.team")
 _RESEARCHER_SYSTEM = (
     "You are a researcher on a prediction-market desk. Your job: estimate the TRUE "
     "probability of a binary outcome and recommend BUY_YES or BUY_NO.\n\n"
-    "Given a prediction market (question, current price, volume, end date) and "
-    "available evidence ([NEWS], [FORM], [H2H], [ODDS], [TEAM], [WIKI], [MARKET]), "
-    "build a concrete thesis:\n"
+    "Given a prediction market and any available evidence, form your best estimate:\n"
     "  • est_probability: your estimate of the TRUE probability (0.0 to 1.0)\n"
     "  • direction: BUY_YES if your estimate > current price, BUY_NO if < price\n"
     "  • score: confidence in your estimate (0-100, >50 favors your direction)\n"
-    "  • thesis: 2-4 sentences citing SPECIFIC evidence lines. DO NOT say 'limited "
-    "evidence' or 'without strong data' — you have evidence, use it. "
-    "Example: '[FORM] Team A has won 4 of last 5, [H2H] leads series 3-1'\n"
+    "  • thesis: 2-4 sentences of reasoning\n"
     "  • The CURRENT market price is the baseline — find the gap.\n\n"
     'Return ONLY JSON: {{"est_probability": 0.XX, "direction": "BUY_YES|BUY_NO", '
     '"score": 0-100, "thesis": "..."}}'
