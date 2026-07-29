@@ -133,7 +133,7 @@ def _recent_outcomes(market_id: str, limit: int = 5) -> list[dict]:
                 direction = r["direction"]
                 entry = r["market_yes_price"] if direction == "BUY_YES" else r["market_no_price"]
                 exit_px = r["exit_price"]
-                won = (exit_px and entry and exit_px > entry) if exit_px and entry else None
+                won = (exit_px > entry) if (exit_px is not None and entry is not None and entry > 0) else None
                 results.append({"direction": direction, "won": won})
             return results
     except Exception:

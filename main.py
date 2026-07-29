@@ -266,6 +266,11 @@ async def _watcher_loop():
                         except (ValueError, TypeError):
                             pass
 
+                    # Cluster exit: another position on this market just exited with profit
+                    if not reason and mid in _exited_markets:
+                        reason = f"cluster exit: market {mid} exited profitably"
+                        exit_px = cur
+
                     if reason:
                         _trail.pop(pid, None)
                         pnl = (exit_px - entry) / entry * 100
@@ -288,11 +293,8 @@ async def _watcher_loop():
                             _exited_markets.add(mid)
                             _profit_exit_markets[mid] = direction
 
-                    # Cluster exit: another position on this market just exited with profit
-                    if not reason and mid in _exited_markets:
-                        reason = f"cluster exit: market {mid} exited profitably"
-                        exit_px = cur
-            # Clean up stale trail entries for picks that no longer exist
+            # Clean up: clear exited markers and stale trail entries
+            _exited_markets.clear()
             live_ids = {p["id"] for p in picks}
             for pid in list(_trail):
                 if pid not in live_ids:
@@ -407,7 +409,7 @@ async def _desk() -> None:
                     from altavela.desk.team import reversion_gate
                     gate = await loop.run_in_executor(
                         None, lambda: reversion_gate(
-                            pick["question"], profit_dir, 0, pick["direction"], evidence))
+                            pick["question"], profit_dir, pick["direction"], evidence))
                     if not gate.get("approve_reversion", False):
                         log.info("Reversion REJECTED for '%s': %s", pick["question"][:60], gate.get("reason", ""))
                         continue

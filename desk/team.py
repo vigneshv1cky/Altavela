@@ -193,13 +193,13 @@ _REVERSION_SCHEMA = {
 }
 
 
-def reversion_gate(question: str, profit_direction: str, profit_pct: float,
+def reversion_gate(question: str, profit_direction: str,
                    scout_direction: str, evidence: list[str],
                    decision_id: str | None = None) -> dict:
     ev_str = "\n".join(f"- {e}" for e in evidence[:8]) if evidence else "No evidence"
     user = (
         f"Market: {question}\n"
-        f"Previous exit: {profit_direction} took profit at +{profit_pct:.1f}%\n"
+        f"Previous exit: {profit_direction} took profit.\n"
         f"Scout now wants: {scout_direction} (reverse bet — mean reversion)\n\n"
         f"Evidence:\n{ev_str}"
     )

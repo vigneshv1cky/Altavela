@@ -181,5 +181,5 @@ def _connect() -> None:
                     if info["side"] == "yes":
                         prices[0] = 0.999 if tid == winning else 0.001
                     else:
-                        prices[1] = 0.001 if tid == winning else 0.999
+                        prices[1] = 0.999 if tid == winning else 0.001
                     _prices[mid] = tuple(prices)
