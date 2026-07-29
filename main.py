@@ -361,92 +361,105 @@ async def _desk() -> None:
         fresh_markets.append(m)
 
     if skipped_cooldown:
-        log.info("Cooldown: %d markets skipped (debated <%.0fh, price move <%.0f%%)",
-                 skipped_cooldown, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT)
+        log.info("Cooldown: %d markets skipped (debated <%.0fh, price move <%.0f%%), %d fresh",
+             skipped_cooldown, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT,
+             len(fresh_markets))
 
     if not fresh_markets:
         log.info("No fresh markets after cooldown filter")
         return
 
-    log.info("Scout scanning %d markets (%d skipped by cooldown)…",
-             len(fresh_markets), skipped_cooldown)
-    store.add_run("DESK")  # Record attempt even if scout finds nothing
-    result = run_scout(fresh_markets)
-    picks = result.get("picks", [])
+    store.add_run("DESK")
+    log.info("Signal scanning %d markets…", len(fresh_markets))
+
+    # Math-driven: score markets by velocity + uncertainty, no LLM scout
+    from altavela.desk.math import compute_signals
+    from altavela.ingest.evidence import gather_evidence
+    from altavela.desk.signal import sanity_check
+
+    scored = []
+    loop = asyncio.get_running_loop()
+    for m in fresh_markets:
+        prices = m.get("prices", [0.5, 0.5])
+        yes_px = prices[0] if len(prices) > 0 else 0.5
+        no_px = prices[1] if len(prices) > 1 else 0.5
+        # Direction: momentum-driven. Positive velocity → BUY_YES, negative → BUY_NO
+        direction = "BUY_YES" if yes_px >= 0.5 else "BUY_NO"
+        
+        # Block post-profit same-direction
+        profit_dir = _profit_exit_markets.get(m["id"], "")
+        if profit_dir and profit_dir == direction:
+            continue
+
+        signals = compute_signals(m["id"], yes_px, no_px, m.get("volume", 0),
+                                 m.get("end_date", ""), direction)
+        # Score: velocity magnitude + uncertainty bonus (near 0.50 = higher score)
+        velocity_score = sum(1 for s in signals if "VELOCITY" in s and "flat" not in s) * 3
+        uncertainty = abs(yes_px - 0.5)
+        uncertainty_score = (0.25 - uncertainty) * 20  # max at 0.50, zero at 0.25 away
+        score = velocity_score + max(0, uncertainty_score)
+        if score > 0:
+            scored.append((m, direction, signals, score))
+
+    scored.sort(key=lambda x: x[3], reverse=True)
+    picks = scored[:MAX_PICKS_PER_WINDOW]
 
     if not picks:
-        log.info("Scout found nothing worth debating (%d skips)", len(result.get("skips", [])))
+        log.info("No signal-worthy markets found")
         return
 
-    log.info("Scout picked %d markets for debate", len(picks))
+    log.info("Signal picked %d markets for sanity check", len(picks))
 
-    # Simple sequential debate (no streaming — headless mode)
-    from altavela.ingest.evidence import gather_evidence
-
-    for pick in picks:
+    for market, direction, math_signals, score in picks:
         try:
-            mid = pick["market_id"]
-            # Block same-direction re-entry after profit — allow reverse
-            profit_dir = _profit_exit_markets.get(mid, "")
-            if profit_dir and profit_dir == pick.get("direction", ""):
-                log.info("Skipping: %s — post-profit block on %s", pick["question"][:60], profit_dir)
-                continue
-            market = next((m for m in fresh_markets if m["id"] == mid), {})
-            if not market:
-                continue
-
-            # Gather evidence
-            loop = asyncio.get_running_loop()
+            mid = market["id"]
             evidence = await loop.run_in_executor(
-                None, gather_evidence, pick["question"], market)
+                None, gather_evidence, market["question"], market)
+            evidence.extend(math_signals)
 
-            # Add mathematical signals to evidence
-            try:
-                from altavela.desk.math import compute_signals
-                math_signals = compute_signals(
-                    mid, market.get("prices", [0.5, 0.5])[0] if market.get("prices") else 0.5,
-                    market.get("prices", [0.5, 0.5])[1] if len(market.get("prices", [])) > 1 else 0.5,
-                    market.get("volume", 0), market.get("end_date", ""),
-                    pick.get("direction", ""))
-                evidence.extend(math_signals)
-            except Exception as exc:
-                log.debug("Math signals failed: %s", exc)
+            # LLM sanity check only — does evidence contradict the math?
+            entry_px = market["prices"][0] if direction == "BUY_YES" else market["prices"][1] if len(market.get("prices", [])) > 1 else 0.5
+            check = await loop.run_in_executor(
+                None, lambda: sanity_check(
+                    market["question"], direction, entry_px, math_signals, evidence))
+            
+            if not check.get("approve", True):
+                log.info("Sanity REJECTED: %s — %s", market["question"][:60], check.get("reason", ""))
+                continue
+            log.info("Sanity APPROVED: %s — %s", market["question"][:60], check.get("reason", "signal valid"))
 
-            # Add profit-exit context for the researcher
-            reversion_note = ""
-            if mid in _profit_exit_markets:
-                profit_dir = _profit_exit_markets[mid]
-                reversion_note = f"[NOTE] This market recently had a profitable {profit_dir} exit. Consider mean reversion carefully — the easy move may already have happened."
-                evidence.append(reversion_note)
-
-                # Reversion gate: only approve reverse bets that make sense
-                if pick["direction"] != profit_dir:
-                    from altavela.desk.team import reversion_gate
-                    gate = await loop.run_in_executor(
-                        None, lambda: reversion_gate(
-                            pick["question"], profit_dir, pick["direction"], evidence))
-                    if not gate.get("approve_reversion", False):
-                        log.info("Reversion REJECTED for '%s': %s", pick["question"][:60], gate.get("reason", ""))
-                        continue
-                    log.info("Reversion APPROVED for '%s': %s", pick["question"][:60], gate.get("reason", ""))
-
-            log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
-            async for ev in _debate_one(market, pick, evidence):
-                t = ev.get("type", "")
-                if t == "thesis":
-                    log.info("  Thesis: %s score=%s", ev.get("direction"), ev.get("score"))
-                elif t == "decision":
-                    log.info("  Verdict: %s approved=%s score=%s flipped=%s",
-                             ev.get("direction"), ev.get("approved"),
-                             ev.get("adjusted_score"), ev.get("flipped"))
-                elif t == "_result":
-                    pid = ev.get("pick_id")
-                    if pid:
-                        log.info("  Booked #%d", pid)
-                    else:
-                        log.info("  Skipped")
+            # Book directly — no debate needed
+            prices = market.get("prices", [0.5, 0.5])
+            est_prob = float(abs(0.5 - entry_px)) / 0.5 * 100  # rough accuracy from distance
+            pick_id = await loop.run_in_executor(
+                None, lambda: store.record_pick({
+                    "market_id": market["id"],
+                    "question": market["question"],
+                    "arm": "TEAM",
+                    "edge": "MATH",
+                    "trigger_src": "DESK",
+                    "direction": direction,
+                    "est_probability": round(abs(entry_px - 0.5) + 0.5, 2),
+                    "score": round(min(score * 10, 100), 1),
+                    "adjusted_score": round(min(score * 10, 100), 1),
+                    "confidence": round(min(score * 10, 100), 1),
+                    "verdict": "STRONG" if score > 5 else "SOFT",
+                    "approved": 1,
+                    "triage_reason": f"Signal score {score:.1f} — math-driven",
+                    "thesis": check.get("reason", "Math signal"),
+                    "debate": {"method": "signal", "score": score, "sanity": check.get("reason", "")},
+                    "model_tags": {"researcher": "signal"},
+                    "market_yes_price": prices[0] if len(prices) > 0 else 0.5,
+                    "market_no_price": prices[1] if len(prices) > 1 else 0.5,
+                    "market_volume": market.get("volume", 0),
+                    "market_liquidity": market.get("liquidity", 0),
+                    "market_end_date": market.get("end_date", ""),
+                    "taken": 1,
+                }))
+            log.info("Signal booked #%d: %s %s (score=%.1f)", pick_id, direction,
+                     market["question"][:60], score)
         except Exception as exc:
-            log.warning("Pick failed for '%s': %s", pick["question"][:60], exc)
+            log.warning("Signal pick failed for '%s': %s", market["question"][:60], exc)
 
     s = store.stats()
     log.info("Run complete: %d picks debated — %d open · %d closed · %d wins (%.1f%%) · P&L total=%+.1f%% median=%+.1f%%",
