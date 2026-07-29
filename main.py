@@ -167,7 +167,6 @@ async def _watcher_loop():
                         reason = f"stopped out: price {cur} fell below stop {stop}"
                         exit_px = cur
 
-                    # Stale position — no meaningful movement after 4 hours
                     # Pre-game exit: sports markets about to start — avoid live volatility
                     end_date = p.get("market_end_date", "")
                     if not reason and end_date:
