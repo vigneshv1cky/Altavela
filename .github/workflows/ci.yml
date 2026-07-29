@@ -15,15 +15,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: |
-          python -c "
-          from altavela.config import MODEL_MAP, MODEL_PROVIDER
-          from altavela.llm import call_role, wrap_data, LLMError
-          from altavela.ledger.store import init as store_init
-          store_init()
-          print('Altavela imports OK')
-          print(f'Provider: {MODEL_PROVIDER}')
-          "
+      - run: PYTHONPATH=. python -c "from altavela.config import MODEL_MAP, MODEL_PROVIDER; from altavela.llm import LLMError; from altavela.ledger.store import init as store_init; store_init(); print('OK:', MODEL_PROVIDER)"
 
   frontend:
     runs-on: ubuntu-latest
@@ -34,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: "latest"
+          version: "10.12.1"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -52,7 +44,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: "latest"
+          version: "10.12.1"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
