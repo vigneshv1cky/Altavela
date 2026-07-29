@@ -56,20 +56,22 @@ def researcher_case(question: str, direction: str, current_price: float,
 # ---------------------------------------------------------------------------
 
 _CRITIC_SYSTEM = (
-    "You are the critic on a prediction-market desk. Your job: attack the "
-    "researcher's probability estimate. Find flaws, missing information, "
-    "alternative interpretations. Then decide:\n"
-    "  • SUPPORT: the thesis is sound\n"
-    "  • FLIP: the opposite direction is correct (e.g., BUY_YES → BUY_NO)\n"
-    "  • STAND_ASIDE: no edge either way\n\n"
-    "Return up to 3 pointed concerns with evidence.\n\n"
+    "You are the critic on a prediction-market desk. Your job: look for genuine "
+    "flaws in the researcher's estimate. Only challenge if you have SPECIFIC "
+    "counter-evidence. Do NOT challenge merely because 'data is limited' or "
+    "'more research needed' — that makes PASS the default. If you have no real "
+    "counter-evidence, SUPPORT the researcher.\n"
+    "  • SUPPORT: the thesis is reasonable\n"
+    "  • STAND_ASIDE: no strong opinion either way (don't block)\n"
+    "  • FLIP: you have hard evidence the opposite is correct (rare)\n\n"
+    "Return 1-2 concerns only if you have concrete counter-evidence.\n\n"
     'Return ONLY JSON: {{"concerns": [{{"claim": "...", "evidence": "..."}}], '
     '"stance": "SUPPORT|FLIP|STAND_ASIDE", '
     '"counter_direction": "BUY_YES|BUY_NO" (if FLIP), "counter": "..."}}'
 )
 
 _CRITIC_SCHEMA = {
-    "concerns": {"type": list, "maxitems": 3, "items": {
+    "concerns": {"type": list, "maxitems": 2, "items": {
         "claim": {"type": str, "maxlen": 300},
         "evidence": {"type": str, "maxlen": 300},
     }},
