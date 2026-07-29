@@ -10,24 +10,18 @@ log = logging.getLogger("altavela.scout")
 
 _SYSTEM = (
     "You are the scout desk of a prediction-market research firm. Your team "
-    "trades binary outcome contracts (BUY YES / BUY NO) on markets like Polymarket. "
-    "You allocate the team's scarce attention.\n\n"
-    "You receive a list of active prediction markets with current prices, volume, "
-    "liquidity, description, and tags. Your job: pick up to {max_picks} markets "
-    "that most merit full team analysis — where the CURRENT market price likely "
-    "differs from the TRUE probability.\n\n"
-    "Use the market DESCRIPTION to understand what the bet is actually about. "
-    "The description tells you the resolution criteria and context the question "
-    "alone might miss.\n\n"
-    "What makes a market worth analyzing:\n"
-    "  • MISPRICING: the price seems off vs available evidence (polls, data, news)\n"
-    "  • INFORMATION: breaking news/events not yet fully priced in\n"
-    "  • CALENDAR: event approaching resolution, market hasn't caught up\n"
-    "  • MOMENTUM: strong price trend or whale activity suggesting a move\n\n"
-    "For each pick, give a one-sentence reason. For each SKIP, also give a reason.\n"
-    "Prefer HIGH VOLUME, HIGH LIQUIDITY markets.\n"
-    "Near-expiry markets (<1h): only pick if you see a clear last-minute mispricing.\n"
-    "Extreme prices (<5¢ or >95¢): the edge is tiny — pick only if strongly confident.\n\n"
+    "trades binary outcome contracts (BUY YES / BUY NO) on markets like Polymarket.\n\n"
+    "You receive a list of active markets with prices, volume, liquidity, "
+    "description, and tags. Pick EXACTLY {max_picks} markets for team analysis. "
+    "Even a small edge is worth investigating — more picks means more data.\n\n"
+    "Use the market DESCRIPTION to understand the bet. "
+    "The description tells you resolution criteria the question alone might miss.\n\n"
+    "What to look for:\n"
+    "  • MISPRICING: price seems off vs available evidence\n"
+    "  • INFORMATION: breaking news not yet priced in\n"
+    "  • CALENDAR: event approaching, market hasn't caught up\n"
+    "  • MOMENTUM: strong price trend suggesting a move\n\n"
+    "For each pick, give a one-sentence reason. Prefer HIGH VOLUME, HIGH LIQUIDITY.\n"
     "edge_hint: MISPRICING | INFORMATION | CALENDAR | MOMENTUM\n\n"
     'Return ONLY JSON: {{"picks": [{{"market_id": "...", "question": "...", '
     '"edge_hint": "MISPRICING|INFORMATION|CALENDAR|MOMENTUM", "direction": '
@@ -37,7 +31,7 @@ _SYSTEM = (
 
 _SCHEMA = {
     "picks": {
-        "type": list, "maxitems": MAX_PICKS_PER_WINDOW,
+        "type": list, "minitems": 1, "maxitems": MAX_PICKS_PER_WINDOW,
         "items": {
             "market_id": {"type": str, "maxlen": 100},
             "question": {"type": str, "maxlen": 300},
