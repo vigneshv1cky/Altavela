@@ -41,7 +41,11 @@ def grade_due() -> int:
             if rp is None:
                 log.warning("Resolved market #%s has no resolutionPrice — skipping", p["id"])
                 continue
-            resolved_price = float(rp)
+            try:
+                resolved_price = float(rp)
+            except (ValueError, TypeError):
+                log.warning("Resolved market #%s has invalid resolutionPrice %r — skipping", p["id"], rp)
+                continue
 
             if direction == "BUY_YES":
                 outcome = 1.0 if resolved_price > 0.5 else 0.0

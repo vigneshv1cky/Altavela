@@ -348,33 +348,34 @@ async def _desk() -> None:
     from altavela.ingest.evidence import gather_evidence
 
     for pick in picks:
-        mid = pick["market_id"]
-        market = next((m for m in fresh_markets if m["id"] == mid), {})
-        if not market:
-            continue
+        try:
+            mid = pick["market_id"]
+            market = next((m for m in fresh_markets if m["id"] == mid), {})
+            if not market:
+                continue
 
-        # Gather real-world evidence for the researcher
-        loop = asyncio.get_running_loop()
-        evidence = await loop.run_in_executor(
-            None, gather_evidence, pick["question"], market)
+            # Gather real-world evidence for the researcher
+            loop = asyncio.get_running_loop()
+            evidence = await loop.run_in_executor(
+                None, gather_evidence, pick["question"], market)
 
-        log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
-        async for ev in _debate_one(market, pick, evidence):
-            t = ev.get("type", "")
-            if t == "thesis":
-                log.info("  Thesis: %s score=%s", ev.get("direction"), ev.get("score"))
-            elif t == "decision":
-                log.info("  Verdict: %s approved=%s score=%s flipped=%s",
-                         ev.get("direction"), ev.get("approved"),
-                         ev.get("adjusted_score"), ev.get("flipped"))
-            elif t == "_result":
-                pid = ev.get("pick_id")
-                if pid:
-                    log.info("  Booked #%d", pid)
-                else:
-                    log.info("  Skipped")
-
-                return
+            log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
+            async for ev in _debate_one(market, pick, evidence):
+                t = ev.get("type", "")
+                if t == "thesis":
+                    log.info("  Thesis: %s score=%s", ev.get("direction"), ev.get("score"))
+                elif t == "decision":
+                    log.info("  Verdict: %s approved=%s score=%s flipped=%s",
+                             ev.get("direction"), ev.get("approved"),
+                             ev.get("adjusted_score"), ev.get("flipped"))
+                elif t == "_result":
+                    pid = ev.get("pick_id")
+                    if pid:
+                        log.info("  Booked #%d", pid)
+                    else:
+                        log.info("  Skipped")
+        except Exception as exc:
+            log.warning("Pick failed for '%s': %s", pick["question"][:60], exc)
 
     s = store.stats()
     log.info("Run complete: %d picks debated — %d open · %d closed · %d wins (%.1f%%) · P&L total=%+.1f%% median=%+.1f%%",

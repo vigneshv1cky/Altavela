@@ -201,11 +201,12 @@ def mark_resolved(pick_id: int, outcome: float, pnl_pct: float | None = None) ->
 def record_exit(pick_id: int, reason: str, exit_price: float | None = None) -> bool:
     pnl_pct = None
     try:
-        row = _connect().execute("SELECT market_yes_price, market_no_price, direction FROM picks WHERE id=?", (pick_id,)).fetchone()
-        if row and exit_price:
-            entry = row["market_yes_price"] if row["direction"] == "BUY_YES" else row["market_no_price"]
-            if entry and entry > 0:
-                pnl_pct = round((exit_price - entry) / entry * 100, 2)
+        with _connect() as conn:
+            row = conn.execute("SELECT market_yes_price, market_no_price, direction FROM picks WHERE id=?", (pick_id,)).fetchone()
+            if row and exit_price:
+                entry = row["market_yes_price"] if row["direction"] == "BUY_YES" else row["market_no_price"]
+                if entry and entry > 0:
+                    pnl_pct = round((exit_price - entry) / entry * 100, 2)
     except Exception:
         pass
     with _lock, _connect() as conn:
