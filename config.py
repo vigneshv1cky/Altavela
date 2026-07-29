@@ -78,7 +78,7 @@ PROVIDER_ENDPOINTS = {
 # ---------------------------------------------------------------------------
 # Caps and limits
 # ---------------------------------------------------------------------------
-MAX_PICKS_PER_WINDOW = 5
+MAX_PICKS_PER_WINDOW = 10
 LLM_MAX_INPUT_CHARS = int(os.environ.get("LLM_MAX_INPUT_CHARS", "48000"))
 LLM_MAX_CONCURRENCY = int(os.environ.get("LLM_MAX_CONCURRENCY", "4"))
 LLM_HTTP_MAX_CONCURRENCY = int(os.environ.get("LLM_HTTP_MAX_CONCURRENCY", "8"))
@@ -130,13 +130,13 @@ WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "5"))
 WATCHER_INTERVAL_S = int(os.environ.get("WATCHER_INTERVAL_S", "60"))
 
 # Autorun
-AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.25"))
+AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.167"))  # 10 min
 AUTORUN_START_ET = os.environ.get("AUTORUN_START_ET", "00:00").strip()
 AUTORUN_END_ET = os.environ.get("AUTORUN_END_ET", "23:59").strip()
 
 # Don't re-debate the same market within this many hours unless price moved > threshold
-REPICK_COOLDOWN_HOURS = float(os.environ.get("REPICK_COOLDOWN_HOURS", "2"))
-REPICK_MIN_PRICE_MOVE_PCT = float(os.environ.get("REPICK_MIN_PRICE_MOVE_PCT", "3"))
+REPICK_COOLDOWN_HOURS = float(os.environ.get("REPICK_COOLDOWN_HOURS", "1"))
+REPICK_MIN_PRICE_MOVE_PCT = float(os.environ.get("REPICK_MIN_PRICE_MOVE_PCT", "2"))
 
 # Web dashboard
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
