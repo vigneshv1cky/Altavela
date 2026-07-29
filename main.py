@@ -306,11 +306,15 @@ async def _watcher_loop():
                             _exited_markets.add(mid)
                             _profit_exit_markets[mid] = direction
 
-            # Clean up stale trail entries for picks that no longer exist
+            # Clean up stale trail entries and poll cache
             live_ids = {p["id"] for p in picks}
+            live_mids = {p["market_id"] for p in picks if p.get("market_id")}
             for pid in list(_trail):
                 if pid not in live_ids:
                     _trail.pop(pid, None)
+            for mid in list(_poll_cache):
+                if mid not in live_mids:
+                    _poll_cache.pop(mid, None)
         except Exception as exc:
             log_w.error("watcher error: %s", exc)
         interval = 2 if _use_stream else WATCHER_INTERVAL_S
@@ -323,7 +327,6 @@ async def _desk() -> None:
     from altavela.ingest.polymarket import fetch_markets, quality_filter
     from altavela.desk.scout import run_scout
     from altavela.ledger import store
-    import time
 
     log = logging.getLogger("altavela.desk")
 
@@ -367,6 +370,7 @@ async def _desk() -> None:
 
     log.info("Scout scanning %d markets (%d skipped by cooldown)…",
              len(fresh_markets), skipped_cooldown)
+    store.add_run("DESK")  # Record attempt even if scout finds nothing
     result = run_scout(fresh_markets)
     picks = result.get("picks", [])
 
@@ -375,7 +379,6 @@ async def _desk() -> None:
         return
 
     log.info("Scout picked %d markets for debate", len(picks))
-    store.add_run("DESK")  # Record attempt before processing — prevents re-fire storms
 
     # Simple sequential debate (no streaming — headless mode)
     from altavela.ingest.evidence import gather_evidence
