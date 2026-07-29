@@ -21,6 +21,11 @@ _lock = threading.Lock()
 
 # Per-market tracking: {clob_token_id: {"market_id": ..., "side": "yes"|"no"}}
 _token_map: dict[str, dict] = {}
+_token_lock = threading.Lock()
+
+# Thread management
+_stream_thread: threading.Thread | None = None
+_stream_stop = threading.Event()
 
 
 def start_stream(token_map: dict[str, dict]) -> None:
@@ -28,11 +33,19 @@ def start_stream(token_map: dict[str, dict]) -> None:
 
     token_map: {clob_token_id: {"market_id": str, "side": "yes"|"no"}}
     """
-    global _token_map
-    _token_map = token_map
+    global _token_map, _stream_thread, _stream_stop
 
-    thread = threading.Thread(target=_run_stream, daemon=True, name="altavela-ws")
-    thread.start()
+    # Stop old thread
+    if _stream_thread and _stream_thread.is_alive():
+        _stream_stop.set()
+        _stream_thread.join(timeout=5)
+    _stream_stop.clear()
+
+    with _token_lock:
+        _token_map = token_map
+
+    _stream_thread = threading.Thread(target=_run_stream, daemon=True, name="altavela-ws")
+    _stream_thread.start()
     log.info("WebSocket stream started with %d tokens", len(token_map))
 
 
@@ -62,18 +75,19 @@ def _connect() -> None:
     ws.connect(WS_URL)
 
     # Subscribe to all tokens
-    token_ids = list(_token_map.keys())
+    with _token_lock:
+        token_ids = list(_token_map.keys())
     sub = json.dumps({
         "assets_ids": token_ids,
         "type": "market",
-        "custom_feature_enabled": True,  # enables best_bid_ask events
+        "custom_feature_enabled": True,
     })
     ws.send(sub)
     log.info("WebSocket subscribed to %d tokens", len(token_ids))
 
     last_ping = time.time()
 
-    while True:
+    while not _stream_stop.is_set():
         try:
             ws.settimeout(1.0)
             raw = ws.recv()

@@ -193,8 +193,8 @@ def live_picks() -> list[dict]:
 def mark_resolved(pick_id: int, outcome: float, pnl_pct: float | None = None) -> None:
     with _lock, _connect() as conn:
         conn.execute(
-            "UPDATE picks SET resolved=1, outcome=?, pnl_return_pct=?, resolved_at=? WHERE id=?",
-            (round(float(outcome), 4), pnl_pct, _now(), int(pick_id)),
+            "UPDATE picks SET resolved=1, outcome=?, pnl_return_pct=?, resolved_at=?, exit_ts=COALESCE(exit_ts, ?) WHERE id=?",
+            (round(float(outcome), 4), pnl_pct, _now(), _now(), int(pick_id)),
         )
 
 

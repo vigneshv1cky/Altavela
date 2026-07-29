@@ -102,12 +102,11 @@ async def _serve() -> None:
 def _register_stream(market_ids: list[str], registered: set[str]) -> None:
     """Look up CLOB token IDs for new markets and add them to the stream."""
     from altavela.ingest.polymarket import market_detail
-    from altavela.ingest.stream import start_stream, _token_map
+    from altavela.ingest.stream import start_stream, _token_map, _token_lock, _stream_thread
 
-    if not _token_map:  # First time — start the stream
-        start_stream({})
+    with _token_lock:
+        current_map = dict(_token_map)
 
-    token_map = dict(_token_map)
     for mid in market_ids:
         if mid in registered:
             continue
@@ -119,16 +118,20 @@ def _register_stream(market_ids: list[str], registered: set[str]) -> None:
             continue
         clob_ids = detail.get("clobTokenIds") or detail.get("clob_token_ids") or []
         if len(clob_ids) >= 2:
-            token_map[clob_ids[0]] = {"market_id": mid, "side": "yes"}
-            token_map[clob_ids[1]] = {"market_id": mid, "side": "no"}
+            current_map[clob_ids[0]] = {"market_id": mid, "side": "yes"}
+            current_map[clob_ids[1]] = {"market_id": mid, "side": "no"}
             registered.add(mid)
-    if token_map != _token_map:
-        _token_map.clear()
-        _token_map.update(token_map)
-        # Re-subscribe with updated token list
-        start_stream(dict(_token_map))
-        logging.getLogger("altavela.watch").info("Stream registered %d tokens for %d markets",
-                                                  len(_token_map), len(registered))
+
+    with _token_lock:
+        old = dict(_token_map)
+
+    if current_map != old:
+        # Only restart if the token list actually changed and thread isn't alive
+        if not _stream_thread or not _stream_thread.is_alive():
+            start_stream(current_map)
+            logging.getLogger("altavela.watch").info(
+                "Stream registered %d tokens for %d markets",
+                len(current_map), len(registered))
 
 async def _watcher_loop():
     """Watch open positions — three exit triggers, checked every 60s:
