@@ -139,6 +139,7 @@ def fetch_markets(
             "end_date": str(end_ts)[:19],
             "category": str(m.get("category") or m.get("tags", []) if isinstance(m.get("tags"), str) else ""),
             "tags": tags[:5],
+            "clobTokenIds": [str(c) for c in clob_ids],
         })
 
     log.info("Polymarket: %d active markets (vol>%s liq>%s)", len(out), min_volume, min_liquidity)
