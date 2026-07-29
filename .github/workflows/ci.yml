@@ -17,9 +17,9 @@ jobs:
       - run: pip install -r requirements.txt
       - run: |
           python -c "
-          from config import MODEL_MAP, MODEL_PROVIDER
-          from llm import call_role, wrap_data, LLMError
-          from ledger.store import init as store_init
+          from altavela.config import MODEL_MAP, MODEL_PROVIDER
+          from altavela.llm import call_role, wrap_data, LLMError
+          from altavela.ledger.store import init as store_init
           store_init()
           print('Altavela imports OK')
           print(f'Provider: {MODEL_PROVIDER}')
