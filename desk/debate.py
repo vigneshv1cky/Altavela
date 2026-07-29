@@ -71,6 +71,14 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
     booked_dir = final_dir if final_dir in ("BUY_YES", "BUY_NO") else direction
     flipped = booked_dir != direction
 
+    # Only book STRONG verdicts — SOFT/PASS are coin flips that lose at -5% stop
+    if verdict["verdict"] != "STRONG":
+        log.info("Skip #%s: verdict %s — only STRONG booked", market["id"], verdict["verdict"])
+        yield {"type": "_result", "pick_id": None, "market_id": market["id"],
+               "question": question, "direction": booked_dir,
+               "verdict": verdict["verdict"], "skipped": True}
+        return
+
     yield {
         "type": "decision",
         "market_id": market["id"],
