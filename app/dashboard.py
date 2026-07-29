@@ -116,15 +116,15 @@ def create_app() -> FastAPI:
 
     @app.get("/api/find-markets")
     async def sse_find_markets(request: Request):
-        """SSE endpoint — runs the full pipeline and streams events live."""
+        """SSE endpoint — signal-driven pipeline, streams events live."""
         import asyncio
 
         async def stream():
             from altavela.ingest.polymarket import fetch_markets, quality_filter
             from altavela.ingest.evidence import gather_evidence
-            from altavela.desk.scout import run_scout as scout_run
-            from altavela.desk.debate import deliberate
-            from altavela.config import REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT
+            from altavela.desk.signal import sanity_check
+            from altavela.desk.math import compute_signals
+            from altavela.config import REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT, MAX_PICKS_PER_WINDOW
 
             loop = asyncio.get_running_loop()
 
@@ -143,7 +143,6 @@ def create_app() -> FastAPI:
                 yield _ev("done", msg="No markets passed quality filter")
                 return
 
-            # Cooldown filter
             recent = await loop.run_in_executor(None, lambda: store.markets_debated_since(REPICK_COOLDOWN_HOURS))
             fresh_markets = []
             for m in markets:
@@ -157,40 +156,91 @@ def create_app() -> FastAPI:
                         continue
                 fresh_markets.append(m)
 
-            yield _ev("status", msg=f"Scout scanning {len(fresh_markets)} markets…")
-            result = await loop.run_in_executor(None, scout_run, fresh_markets)
-            picks = result.get("picks", [])
+            yield _ev("status", msg=f"Signal scanning {len(fresh_markets)} markets…")
+
+            # Score markets by math signals
+            scored = []
+            for m in fresh_markets:
+                prices = m.get("prices", [0.5, 0.5])
+                yes_px = prices[0] if len(prices) > 0 else 0.5
+                direction = "BUY_YES" if yes_px >= 0.5 else "BUY_NO"
+                signals = compute_signals(m["id"], yes_px, prices[1] if len(prices) > 1 else 0.5,
+                                          m.get("volume", 0), m.get("end_date", ""), direction)
+                velocity_score = sum(1 for s in signals if "VELOCITY" in s and "flat" not in s) * 3
+                uncertainty = abs(yes_px - 0.5)
+                uncertainty_score = (0.25 - uncertainty) * 20
+                score = velocity_score + max(0, uncertainty_score)
+                if score > 0:
+                    scored.append((m, direction, signals, score))
+
+            scored.sort(key=lambda x: x[3], reverse=True)
+            picks = scored[:MAX_PICKS_PER_WINDOW]
 
             if not picks:
-                yield _ev("done", msg=f"No picks — {len(result.get('skips',[]))} skipped")
+                yield _ev("done", msg="No signal-worthy markets found")
                 return
 
-            for pick in picks:
+            yield _ev("status", msg=f"Signal picked {len(picks)} markets for sanity check")
+
+            for market, direction, math_signals, score in picks:
                 if await request.is_disconnected():
                     yield _ev("done", msg="Client disconnected")
                     return
-                mid = pick["market_id"]
-                market = next((m for m in fresh_markets if m["id"] == mid), {})
-                if not market:
-                    continue
 
-                yield _ev("debate_start", question=pick["question"], edge_hint=pick.get("edge_hint"))
+                mid = market["id"]
+                yield _ev("signal_pick", question=market["question"], direction=direction,
+                          score=score, signals=len(math_signals))
 
                 evidence = await loop.run_in_executor(
-                    None, gather_evidence, pick["question"], market)
+                    None, gather_evidence, market["question"], market)
+                evidence.extend(math_signals)
                 if evidence:
-                    yield _ev("evidence", msg=f"{len(evidence)} articles found for '{pick['question'][:60]}'")
+                    yield _ev("evidence", msg=f"{len(evidence)} items for '{market['question'][:60]}'")
 
-                yield _ev("scout_pick", question=pick["question"], direction=pick["direction"],
-                          edge_hint=pick.get("edge_hint"), reason=pick.get("reason"))
+                entry_px = market["prices"][0] if direction == "BUY_YES" else market["prices"][1] if len(market.get("prices", [])) > 1 else 0.5
+                check = await loop.run_in_executor(
+                    None, lambda: sanity_check(
+                        market["question"], direction, entry_px, math_signals, evidence))
 
-                async for ev_data in deliberate(market, pick, evidence, "STREAM", None):
-                    t = ev_data.get("type", "")
-                    if t != "_result":
-                        yield _ev(t, **{k: v for k, v in ev_data.items() if k != "type"})
+                yield _ev("sanity", question=market["question"], direction=direction,
+                          approved=check.get("approve", True), reason=check.get("reason", ""))
+
+                if not check.get("approve", True):
+                    yield _ev("status", msg=f"Sanity REJECTED: {market['question'][:60]}")
+                    continue
+
+                # Book directly
+                prices = market.get("prices", [0.5, 0.5])
+                pick_id = await loop.run_in_executor(
+                    None, lambda: store.record_pick({
+                        "market_id": market["id"],
+                        "question": market["question"],
+                        "arm": "TEAM",
+                        "edge": "MATH",
+                        "trigger_src": "STREAM",
+                        "direction": direction,
+                        "est_probability": round(abs(entry_px - 0.5) + 0.5, 2),
+                        "score": round(min(score * 10, 100), 1),
+                        "adjusted_score": round(min(score * 10, 100), 1),
+                        "confidence": round(min(score * 10, 100), 1),
+                        "verdict": "STRONG" if score > 5 else "SOFT",
+                        "approved": 1,
+                        "triage_reason": f"Signal score {score:.1f} — math-driven",
+                        "thesis": check.get("reason", "Math signal"),
+                        "debate": {"method": "signal", "score": score, "sanity": check.get("reason", "")},
+                        "model_tags": {"researcher": "signal"},
+                        "market_yes_price": prices[0] if len(prices) > 0 else 0.5,
+                        "market_no_price": prices[1] if len(prices) > 1 else 0.5,
+                        "market_volume": market.get("volume", 0),
+                        "market_liquidity": market.get("liquidity", 0),
+                        "market_end_date": market.get("end_date", ""),
+                        "taken": 1,
+                    }))
+                yield _ev("booked", pick_id=pick_id, question=market["question"],
+                          direction=direction, score=score)
 
             await loop.run_in_executor(None, lambda: store.add_run("STREAM"))
-            yield _ev("done", msg=f"{len(picks)} debated")
+            yield _ev("done", msg=f"{len(picks)} sanity-checked")
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache",
