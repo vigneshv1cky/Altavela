@@ -37,7 +37,11 @@ def grade_due() -> int:
 
         if detail and detail.get("resolved"):
             direction = p.get("direction", "")
-            resolved_price = float(detail.get("resolutionPrice", detail.get("resolution_price", 0.5)) or 0.5)
+            rp = detail.get("resolutionPrice") or detail.get("resolution_price")
+            if rp is None:
+                log.warning("Resolved market #%s has no resolutionPrice — skipping", p["id"])
+                continue
+            resolved_price = float(rp)
 
             if direction == "BUY_YES":
                 outcome = 1.0 if resolved_price > 0.5 else 0.0

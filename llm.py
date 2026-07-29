@@ -195,6 +195,8 @@ def _validate(spec: dict, data: Any, path: str = "") -> list[str]:
             continue
         if "min" in rules and value < rules["min"]:
             errors.append(f"{loc}: {value} < min {rules['min']}")
+        if "minitems" in rules and len(value) < rules["minitems"]:
+            errors.append(f"{loc}: {len(value)} items < min {rules['minitems']}")
         if "max" in rules and value > rules["max"]:
             errors.append(f"{loc}: {value} > max {rules['max']}")
         if "enum" in rules and value not in rules["enum"]:

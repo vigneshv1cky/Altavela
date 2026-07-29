@@ -20,7 +20,7 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
     question = pick.get("question", market.get("question", ""))
     direction = pick["direction"]
     prices = market.get("prices", [0.5, 0.5])
-    current_price = prices[0] if direction == "BUY_YES" else prices[1]
+    current_price = prices[0] if direction == "BUY_YES" and len(prices) > 0 else (prices[1] if len(prices) > 1 else 0.5)
 
     # Researcher
     thesis = await loop.run_in_executor(
