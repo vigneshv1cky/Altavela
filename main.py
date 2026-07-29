@@ -377,10 +377,15 @@ async def _desk() -> None:
             if not market:
                 continue
 
+            # Pass profit-exit context to evidence — researcher should consider mean reversion
+            extra_ctx = ""
+            if mid in _profit_exit_markets:
+                extra_ctx = f" [NOTE: This market recently had a profitable {_profit_exit_markets[mid]} exit. Consider mean reversion carefully — the easy move may already have happened.]"
+
             # Gather real-world evidence for the researcher
             loop = asyncio.get_running_loop()
             evidence = await loop.run_in_executor(
-                None, gather_evidence, pick["question"], market)
+                None, gather_evidence, pick["question"] + extra_ctx, market)
 
             log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
             async for ev in _debate_one(market, pick, evidence):
