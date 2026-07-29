@@ -156,8 +156,12 @@ def quality_filter(markets: list[dict]) -> list[dict]:
         if len(outcomes) != 2:
             dropped_nonbinary += 1
             continue
-        prices = m.get("prices", [0.5, 0.5])
+        prices = m.get("prices", [])
         yes_px = prices[0] if len(prices) > 0 else 0.5
+        # Skip markets with zero prices (missing data)
+        if not prices or (prices[0] == 0 and len(prices) < 2):
+            dropped_nonbinary += 1
+            continue
         if yes_px < 0.03 or yes_px > 0.97:
             dropped_extreme += 1
             continue

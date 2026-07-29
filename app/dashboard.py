@@ -152,7 +152,7 @@ def create_app() -> FastAPI:
                     prev = recent[mid]
                     prices = m.get("prices", [0.5, 0.5])
                     cur_yes = prices[0] if len(prices) > 0 else 0.5
-                    prev_yes = prev.get("yes_price") or 0.5
+                    prev_yes = prev.get("yes_price") if prev.get("yes_price") is not None else 0.5
                     if prev_yes > 0 and abs(cur_yes - prev_yes) / prev_yes * 100 < REPICK_MIN_PRICE_MOVE_PCT:
                         continue
                 fresh_markets.append(m)

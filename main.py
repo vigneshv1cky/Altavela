@@ -60,8 +60,12 @@ async def _serve() -> None:
         while True:
             try:
                 now = datetime.now(ET)
-                in_window = ((now.hour, now.minute) >= (s_h, s_m) and
-                             (now.hour, now.minute) < (e_h, e_m))
+                now_tup = (now.hour, now.minute)
+                # Handle cross-midnight windows (e.g., 22:00-02:00)
+                if (s_h, s_m) <= (e_h, e_m):
+                    in_window = (s_h, s_m) <= now_tup < (e_h, e_m)
+                else:
+                    in_window = now_tup >= (s_h, s_m) or now_tup < (e_h, e_m)
                 # Compute CURRENT slot (last interval boundary) — not NEXT.
                 # The old +1 always pointed to the future slot, so the autorun never fired.
                 window_start = now.replace(hour=s_h, minute=s_m, second=0, microsecond=0)

@@ -43,7 +43,6 @@ def researcher_case(question: str, direction: str, current_price: float,
     )
     out = call_role("researcher", _RESEARCHER_SYSTEM, user,
                     schema=_RESEARCHER_SCHEMA, decision_id=decision_id)
-    out.pop("_downgraded_model", None)
     return out
 
 
@@ -87,7 +86,6 @@ def critic_challenge(question: str, thesis: dict, evidence: list[str],
     )
     out = call_role("critic", _CRITIC_SYSTEM, user,
                     schema=_CRITIC_SCHEMA, decision_id=decision_id)
-    out.pop("_downgraded_model", None)
     return out
 
 
@@ -124,7 +122,6 @@ def researcher_reply(question: str, thesis: dict, concerns: list[dict],
     )
     out = call_role("researcher", _REBUTTAL_SYSTEM, user,
                     schema=_REBUTTAL_SCHEMA, decision_id=decision_id)
-    out.pop("_downgraded_model", None)
     return out
 
 
@@ -168,5 +165,4 @@ def judge_verdict(question: str, thesis: dict, concerns: list[dict],
     )
     out = call_role("judge", _JUDGE_SYSTEM, user,
                     schema=_JUDGE_SCHEMA, decision_id=decision_id)
-    out.pop("_downgraded_model", None)
     return out

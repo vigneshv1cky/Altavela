@@ -128,6 +128,23 @@ WATCHER_STALE_MOVE_PCT = float(os.environ.get("WATCHER_STALE_MOVE_PCT", "1"))
 WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "5"))
 # How often the watcher checks positions
 WATCHER_INTERVAL_S = int(os.environ.get("WATCHER_INTERVAL_S", "60"))
+if WATCHER_INTERVAL_S < 1:
+    raise RuntimeError("WATCHER_INTERVAL_S must be >= 1")
+LLM_TIMEOUT_S = int(os.environ.get("LLM_TIMEOUT_S", "120"))
+if LLM_TIMEOUT_S < 1:
+    raise RuntimeError("LLM_TIMEOUT_S must be >= 1")
+LLM_MAX_CONCURRENCY = int(os.environ.get("LLM_MAX_CONCURRENCY", "4"))
+if LLM_MAX_CONCURRENCY < 1:
+    raise RuntimeError("LLM_MAX_CONCURRENCY must be >= 1")
+WATCHER_TAKE_PROFIT_PCT = float(os.environ.get("WATCHER_TAKE_PROFIT_PCT", "5"))
+if WATCHER_TAKE_PROFIT_PCT <= 0:
+    raise RuntimeError("WATCHER_TAKE_PROFIT_PCT must be > 0")
+WATCHER_TRAIL_PCT = float(os.environ.get("WATCHER_TRAIL_PCT", "5"))
+if WATCHER_TRAIL_PCT <= 0:
+    raise RuntimeError("WATCHER_TRAIL_PCT must be > 0")
+WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "5"))
+if WATCHER_STOP_PCT <= 0:
+    raise RuntimeError("WATCHER_STOP_PCT must be > 0")
 
 # Autorun
 AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.25"))  # 15 min
