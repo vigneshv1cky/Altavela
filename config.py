@@ -154,8 +154,6 @@ AUTORUN_END_ET = os.environ.get("AUTORUN_END_ET", "23:59").strip()
 # Don't re-debate the same market within this many hours unless price moved > threshold
 REPICK_COOLDOWN_HOURS = float(os.environ.get("REPICK_COOLDOWN_HOURS", "2"))
 REPICK_MIN_PRICE_MOVE_PCT = float(os.environ.get("REPICK_MIN_PRICE_MOVE_PCT", "3"))
-# Don't re-debate crypto/commodity — too volatile, stop loss can't keep up
-CRYPTO_BLOCKLIST = {"crypto", "bitcoin", "btc", "ethereum", "eth", "solana", "xrp", "gold", "xauusd", "oil", "commodity"}
 
 # Web dashboard
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
