@@ -382,6 +382,18 @@ async def _desk() -> None:
             evidence = await loop.run_in_executor(
                 None, gather_evidence, pick["question"], market)
 
+            # Add mathematical signals to evidence
+            try:
+                from altavela.desk.math import compute_signals
+                math_signals = compute_signals(
+                    mid, market.get("prices", [0.5, 0.5])[0] if market.get("prices") else 0.5,
+                    market.get("prices", [0.5, 0.5])[1] if len(market.get("prices", [])) > 1 else 0.5,
+                    market.get("volume", 0), market.get("end_date", ""),
+                    pick.get("direction", ""))
+                evidence.extend(math_signals)
+            except Exception as exc:
+                log.debug("Math signals failed: %s", exc)
+
             # Add profit-exit context for the researcher
             reversion_note = ""
             if mid in _profit_exit_markets:
