@@ -1,10 +1,13 @@
 """Altavela — a multi-agent prediction-market research engine.
 
-Trades binary outcome contracts on markets like Polymarket. A team of LLM agents
-scans active markets, debates the true probability of each outcome, and books
-directional calls (BUY YES / BUY NO) that are graded against the actual resolution.
+Scans Polymarket for binary outcome markets, debates true probabilities
+via an LLM research team (scout → researcher → critic → rebuttal → judge),
+and books directional calls (BUY YES / BUY NO).
 
-Research / paper only — no on-chain execution.
+Open positions are watched by a trailing stop / stop loss / stale exit watcher
+every 60s. Resolved markets are graded against actual outcomes.
+
+Research mode — no on-chain execution. Web dashboard at :8001.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

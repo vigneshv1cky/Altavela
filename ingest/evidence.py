@@ -1,8 +1,12 @@
 """Evidence gathering — fetches real-world data for prediction-market research.
 
-Sources (all free, no API keys):
-  - DuckDuckGo web search — real search results with snippets
-  - Polymarket metadata — market description, resolution source, category
+Sources:
+  - DuckDuckGo web search — real search results with 400-char snippets
+  - Smart query generation — extracts team names, tries quoted + targeted queries
+  - Sports: [FORM]/[H2H]/[ODDS] targeted extra searches
+  - Polymarket metadata — market description, tags, resolution source
+
+Code fetches facts, LLM agents interpret them. No API keys needed.
 """
 
 import logging

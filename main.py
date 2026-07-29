@@ -99,9 +99,12 @@ async def _serve() -> None:
 
 
 async def _watcher_loop():
-    """Watch open positions — exit when price reaches the researcher's estimated
-    fair value (target) or falls past the stop-loss threshold.
-    Uses a trailing stop after take-profit threshold to capture large moves."""
+    """Watch open positions — three exit triggers, checked every 60s:
+    1. Trailing stop — activates at +TAKE_PROFIT_PCT%, trails TRAIL_PCT% below peak
+    2. Stop loss — exits at entry × (1 - STOP_PCT/100)
+    3. Stale exit — 4h+ open with <1% movement
+    4. Market resolved — YES ≤0.001 or ≥0.999 → WIN/LOSS stamped
+    5. Pre-game — sports markets 30min before kickoff"""
     from altavela.ingest.polymarket import live_prices
     from altavela.ledger import store
     from altavela.config import WATCHER_TAKE_PROFIT_PCT, WATCHER_TRAIL_PCT, WATCHER_STALE_HOURS, WATCHER_STALE_MOVE_PCT, WATCHER_STOP_PCT, WATCHER_INTERVAL_S
