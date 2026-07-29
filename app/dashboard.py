@@ -161,10 +161,6 @@ def create_app() -> FastAPI:
                 return
 
             for pick in picks:
-                # Only book INFORMATION edge
-                if pick.get("edge_hint", "") != "INFORMATION":
-                    yield _ev("status", msg=f"Skipping '{pick['question'][:60]}' — edge={pick.get('edge_hint')}")
-                    continue
                 mid = pick["market_id"]
                 market = next((m for m in fresh_markets if m["id"] == mid), {})
                 if not market:
