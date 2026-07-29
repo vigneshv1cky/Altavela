@@ -126,12 +126,16 @@ def _register_stream(market_ids: list[str], registered: set[str]) -> None:
         old = dict(_token_map)
 
     if current_map != old:
-        # Only restart if the token list actually changed and thread isn't alive
         if not _stream_thread or not _stream_thread.is_alive():
             start_stream(current_map)
-            logging.getLogger("altavela.watch").info(
-                "Stream registered %d tokens for %d markets",
-                len(current_map), len(registered))
+        else:
+            # Thread alive — update token map directly, get_prices handles new tokens
+            with _token_lock:
+                _token_map.clear()
+                _token_map.update(current_map)
+        logging.getLogger("altavela.watch").info(
+            "Stream registered %d tokens for %d markets",
+            len(current_map), len(registered))
 
 async def _watcher_loop():
     """Watch open positions — three exit triggers, checked every 60s:

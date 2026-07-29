@@ -69,7 +69,8 @@ def _connect() -> None:
         import websocket  # pip install websocket-client
     except ImportError:
         log.error("websocket-client not installed — install with: pip install websocket-client")
-        return
+        time.sleep(30)
+        return  # _run_stream will catch and retry after sleep
 
     ws = websocket.WebSocket()
     ws.connect(WS_URL)
@@ -165,18 +166,20 @@ def _connect() -> None:
         # Market resolved
         elif event_type == "market_resolved":
             winning = msg.get("winning_asset_id", "")
-            info = _token_map.get(winning)
-            if not info:
-                # Check all assets for this market
-                mid_id = msg.get("id", "")
-                for tid, ti in _token_map.items():
-                    if ti["market_id"] == mid_id:
-                        with _lock:
-                            if mid_id not in _prices:
-                                _prices[mid_id] = [0.5, 0.5]
-                            prices = list(_prices[mid_id])
-                            if ti["side"] == "yes":
-                                prices[0] = 1.0 if tid == winning else 0.001
-                            else:
-                                prices[1] = 0.001 if tid == winning else 1.0
-                            _prices[mid_id] = tuple(prices)
+            # Update all tokens for this resolved market
+            asset_ids = msg.get("assets_ids", [])
+            mid_id = msg.get("id", "")
+            with _lock:
+                for tid in asset_ids:
+                    info = _token_map.get(tid)
+                    if not info:
+                        continue
+                    mid = info["market_id"]
+                    if mid not in _prices:
+                        _prices[mid] = [0.5, 0.5]
+                    prices = list(_prices[mid])
+                    if info["side"] == "yes":
+                        prices[0] = 0.999 if tid == winning else 0.001
+                    else:
+                        prices[1] = 0.001 if tid == winning else 0.999
+                    _prices[mid] = tuple(prices)

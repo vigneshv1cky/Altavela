@@ -166,6 +166,9 @@ def create_app() -> FastAPI:
                 return
 
             for pick in picks:
+                if await request.is_disconnected():
+                    yield _ev("done", msg="Client disconnected")
+                    return
                 mid = pick["market_id"]
                 market = next((m for m in fresh_markets if m["id"] == mid), {})
                 if not market:

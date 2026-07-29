@@ -43,7 +43,7 @@ for _role in list(MODEL_MAP):
 # ---------------------------------------------------------------------------
 
 MODEL_PROVIDERS = ("claude_sdk", "kimi", "deepseek")
-MODEL_PROVIDER = os.environ.get("MODEL_PROVIDER", "claude_sdk").strip().lower()
+MODEL_PROVIDER = os.environ.get("MODEL_PROVIDER", "deepseek").strip().lower()
 if MODEL_PROVIDER not in MODEL_PROVIDERS:
     raise RuntimeError(
         f"MODEL_PROVIDER={MODEL_PROVIDER!r} not understood. "

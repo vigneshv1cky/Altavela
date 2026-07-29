@@ -29,7 +29,7 @@ _SPORTS_TERMS = re.compile(
 def _web_search(query: str, max_results: int = 6) -> list[str]:
     """Search the web via DuckDuckGo — returns title + snippet."""
     try:
-        with DDGS() as ddgs:
+        with DDGS(timeout=15) as ddgs:
             results = []
             for r in ddgs.text(query, max_results=max_results):
                 body = r.get("body", "")

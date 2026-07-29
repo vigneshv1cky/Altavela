@@ -231,6 +231,8 @@ def _extract_json(text: str) -> Any:
 _MODEL_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
+    "deepseek-v4-pro": (2.50, 10.00),
+    "deepseek-v4-flash": (0.27, 1.10),
     "kimi-k3": (3.00, 15.00),
     "kimi-k2.6": (0.95, 4.00),
     "kimi-k2-0905-preview": (0.60, 2.50),
@@ -324,7 +326,7 @@ def _one_shot_http(model: str, system: str, user: str,
     except Exception as exc:
         if not grounded:
             raise
-        log.warning("web_search loop failed (%s) — parametric fallback", exc)
+        log.warning("web_search failed (%s) — falling back to parametric", exc)
         data = _http_chat(base, key, _payload(False), timeout)
 
     msg = (data.get("choices") or [{}])[0].get("message") or {}
