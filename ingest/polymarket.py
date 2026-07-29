@@ -146,10 +146,12 @@ def fetch_markets(
 
 
 def quality_filter(markets: list[dict]) -> list[dict]:
-    """Remove unprocessable markets: non-binary, extreme prices."""
+    """Remove unprocessable markets: non-binary, extreme prices, crypto/commodity."""
+    from altavela.config import CRYPTO_BLOCKLIST
     filtered = []
     dropped_nonbinary = 0
     dropped_extreme = 0
+    dropped_crypto = 0
 
     for m in markets:
         outcomes = m.get("outcomes", [])
@@ -158,18 +160,22 @@ def quality_filter(markets: list[dict]) -> list[dict]:
             continue
         prices = m.get("prices", [])
         yes_px = prices[0] if len(prices) > 0 else 0.5
-        # Skip markets with zero prices (missing data)
         if not prices or (prices[0] == 0 and len(prices) < 2):
             dropped_nonbinary += 1
             continue
         if yes_px < 0.03 or yes_px > 0.97:
             dropped_extreme += 1
             continue
+        # Skip crypto/commodity — too volatile for stop loss
+        q = (m.get("question", "") + " " + " ".join(m.get("tags", []) or [])).lower()
+        if any(kw in q for kw in CRYPTO_BLOCKLIST):
+            dropped_crypto += 1
+            continue
         filtered.append(m)
 
-    if dropped_nonbinary or dropped_extreme:
-        log.info("Quality filter: %d non-binary dropped, %d extreme-price dropped, %d passed",
-                 dropped_nonbinary, dropped_extreme, len(filtered))
+    if dropped_nonbinary or dropped_extreme or dropped_crypto:
+        log.info("Quality filter: %d non-binary, %d extreme-price, %d crypto dropped, %d passed",
+                 dropped_nonbinary, dropped_extreme, dropped_crypto, len(filtered))
     return filtered
 
 
