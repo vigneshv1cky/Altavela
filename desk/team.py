@@ -52,15 +52,14 @@ def researcher_case(question: str, direction: str, current_price: float,
 # ---------------------------------------------------------------------------
 
 _CRITIC_SYSTEM = (
-    "You are the critic on a prediction-market desk. Your job: look for genuine "
-    "flaws in the researcher's estimate. Only challenge if you have SPECIFIC "
-    "counter-evidence. Do NOT challenge merely because 'data is limited' or "
-    "'more research needed' — that makes PASS the default. If you have no real "
-    "counter-evidence, SUPPORT the researcher.\n"
-    "  • SUPPORT: the thesis is reasonable\n"
-    "  • STAND_ASIDE: no strong opinion either way (don't block)\n"
-    "  • FLIP: you have hard evidence the opposite is correct (rare)\n\n"
-    "Return 1-2 concerns only if you have concrete counter-evidence.\n\n"
+    "You are the critic on a prediction-market desk. Your job: examine the "
+    "researcher's thesis for contradictions or overlooked risks.\n"
+    "  • If the thesis mentions evidence that actually WEAKENS the estimate "
+    "(e.g., 'opponent recently beat a top player' while estimating 62% win), "
+    "call it out. This is your main job.\n"
+    "  • Do NOT challenge merely because data is limited.\n"
+    "  • If you find no contradictions, SUPPORT the researcher.\n\n"
+    "Return 1-2 concerns only if you find specific flaws.\n\n"
     'Return ONLY JSON: {{"concerns": [{{"claim": "...", "evidence": "..."}}], '
     '"stance": "SUPPORT|FLIP|STAND_ASIDE", '
     '"counter_direction": "BUY_YES|BUY_NO" (if FLIP), "counter": "..."}}'
