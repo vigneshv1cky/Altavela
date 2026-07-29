@@ -166,3 +166,43 @@ def judge_verdict(question: str, thesis: dict, concerns: list[dict],
     out = call_role("judge", _JUDGE_SYSTEM, user,
                     schema=_JUDGE_SCHEMA, decision_id=decision_id)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Reversion gate — should we bet against a market that just took profit?
+# ---------------------------------------------------------------------------
+
+_REVERSION_SYSTEM = (
+    "You are a reversion analyst on a prediction-market desk. Your job: decide "
+    "whether to bet AGAINST a market that just took profit.\n\n"
+    "A BUY_YES position just exited with +X% profit. Now the scout wants to "
+    "bet BUY_NO (mean reversion). Should we?\n\n"
+    "Guidelines:\n"
+    "  • APPROVE reversion if: the profit was from a short-term spike/event, "
+    "market likely to revert (e.g., news faded, price overshot)\n"
+    "  • REJECT reversion if: the market has strong trend/momentum, or the profit "
+    "exit was from a genuine directional move that may continue\n"
+    "  • Default to REJECT unless there's a clear reason prices should reverse\n\n"
+    'Return ONLY JSON: {{"approve_reversion": true|false, '
+    '"reason": "..."}}'
+)
+
+_REVERSION_SCHEMA = {
+    "approve_reversion": {"type": bool},
+    "reason": {"type": str, "maxlen": 300},
+}
+
+
+def reversion_gate(question: str, profit_direction: str, profit_pct: float,
+                   scout_direction: str, evidence: list[str],
+                   decision_id: str | None = None) -> dict:
+    ev_str = "\n".join(f"- {e}" for e in evidence[:8]) if evidence else "No evidence"
+    user = (
+        f"Market: {question}\n"
+        f"Previous exit: {profit_direction} took profit at +{profit_pct:.1f}%\n"
+        f"Scout now wants: {scout_direction} (reverse bet — mean reversion)\n\n"
+        f"Evidence:\n{ev_str}"
+    )
+    out = call_role("loner", _REVERSION_SYSTEM, user,
+                    schema=_REVERSION_SCHEMA, decision_id=decision_id)
+    return out

@@ -383,8 +383,22 @@ async def _desk() -> None:
                 None, gather_evidence, pick["question"], market)
 
             # Add profit-exit context for the researcher
+            reversion_note = ""
             if mid in _profit_exit_markets:
-                evidence.append(f"[NOTE] This market recently had a profitable {_profit_exit_markets[mid]} exit. Consider mean reversion carefully — the easy move may already have happened.")
+                profit_dir = _profit_exit_markets[mid]
+                reversion_note = f"[NOTE] This market recently had a profitable {profit_dir} exit. Consider mean reversion carefully — the easy move may already have happened."
+                evidence.append(reversion_note)
+
+                # Reversion gate: only approve reverse bets that make sense
+                if pick["direction"] != profit_dir:
+                    from altavela.desk.team import reversion_gate
+                    gate = await loop.run_in_executor(
+                        None, lambda: reversion_gate(
+                            pick["question"], profit_dir, 0, pick["direction"], evidence))
+                    if not gate.get("approve_reversion", False):
+                        log.info("Reversion REJECTED for '%s': %s", pick["question"][:60], gate.get("reason", ""))
+                        continue
+                    log.info("Reversion APPROVED for '%s': %s", pick["question"][:60], gate.get("reason", ""))
 
             log.info("Debating: %s (%d evidence articles)", pick["question"][:80], len(evidence))
             async for ev in _debate_one(market, pick, evidence):
