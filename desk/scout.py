@@ -13,9 +13,12 @@ _SYSTEM = (
     "trades binary outcome contracts (BUY YES / BUY NO) on markets like Polymarket. "
     "You allocate the team's scarce attention.\n\n"
     "You receive a list of active prediction markets with current prices, volume, "
-    "and liquidity. Your job: pick up to {max_picks} markets that most merit full "
-    "team analysis — where the CURRENT market price likely differs from the TRUE "
-    "probability.\n\n"
+    "liquidity, description, and tags. Your job: pick up to {max_picks} markets "
+    "that most merit full team analysis — where the CURRENT market price likely "
+    "differs from the TRUE probability.\n\n"
+    "Use the market DESCRIPTION to understand what the bet is actually about. "
+    "The description tells you the resolution criteria and context the question "
+    "alone might miss.\n\n"
     "What makes a market worth analyzing:\n"
     "  • MISPRICING: the price seems off vs available evidence (polls, data, news)\n"
     "  • INFORMATION: breaking news/events not yet fully priced in\n"
@@ -68,6 +71,7 @@ def run_scout(markets: list[dict]) -> dict:
         lines.append(json.dumps({
             "market_id": m["id"],
             "question": m["question"],
+            "description": m.get("description", "")[:200],
             "outcomes": m.get("outcomes", []),
             "prices": m.get("prices", []),
             "volume": m.get("volume", 0),
