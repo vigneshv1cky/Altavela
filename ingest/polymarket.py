@@ -158,7 +158,7 @@ def quality_filter(markets: list[dict]) -> list[dict]:
             continue
         prices = m.get("prices", [0.5, 0.5])
         yes_px = prices[0] if len(prices) > 0 else 0.5
-        if yes_px < 0.05 or yes_px > 0.95:
+        if yes_px < 0.03 or yes_px > 0.97:
             dropped_extreme += 1
             continue
         filtered.append(m)
