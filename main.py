@@ -162,13 +162,6 @@ async def _watcher_loop():
                             won = yes_px <= 0.001
                         reason = f"market resolved: {'WIN' if won else 'LOSS'} (YES={yes_px})"
                         exit_px = cur
-                    elif trail_high and cur <= trail_high * (1 - WATCHER_TRAIL_PCT / 100):
-                        peak = trail_high
-                        reason = f"trailing-stop: price {cur} fell {WATCHER_TRAIL_PCT}% below peak {peak}"
-                        exit_px = cur
-                    elif cur <= stop:
-                        reason = f"stopped out: price {cur} fell below stop {stop}"
-                        exit_px = cur
 
                     # Pre-game exit: sports markets about to start — avoid live volatility
                     end_date = p.get("market_end_date", "")
@@ -182,6 +175,14 @@ async def _watcher_loop():
                                 exit_px = cur
                         except (ValueError, TypeError):
                             pass
+
+                    if not reason and trail_high and cur <= trail_high * (1 - WATCHER_TRAIL_PCT / 100):
+                        peak = trail_high
+                        reason = f"trailing-stop: price {cur} fell {WATCHER_TRAIL_PCT}% below peak {peak}"
+                        exit_px = cur
+                    elif not reason and cur <= stop:
+                        reason = f"stopped out: price {cur} fell below stop {stop}"
+                        exit_px = cur
 
                     # Stale position — no meaningful movement after 4 hours
                     ts = p.get("ts", "")
