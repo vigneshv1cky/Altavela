@@ -338,6 +338,7 @@ async def _desk() -> None:
         return
 
     log.info("Scout picked %d markets for debate", len(picks))
+    store.add_run("DESK")  # Record attempt before processing — prevents re-fire storms
 
     # Simple sequential debate (no streaming — headless mode)
     from altavela.ingest.evidence import gather_evidence
@@ -363,9 +364,14 @@ async def _desk() -> None:
                          ev.get("direction"), ev.get("approved"),
                          ev.get("adjusted_score"), ev.get("flipped"))
             elif t == "_result":
-                log.info("  Booked #%d", ev.get("pick_id"))
+                pid = ev.get("pick_id")
+                if pid:
+                    log.info("  Booked #%d", pid)
+                else:
+                    log.info("  Skipped")
 
-    store.add_run("DESK")
+                return
+
     s = store.stats()
     log.info("Run complete: %d picks debated — %d open · %d closed · %d wins (%.1f%%) · P&L total=%+.1f%% median=%+.1f%%",
              len(picks), s["total_picks"] - s["closed"], s["closed"], s["closed_wins"],
