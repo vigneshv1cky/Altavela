@@ -275,7 +275,8 @@ async def _watcher_loop():
                     _trail.pop(pid, None)
         except Exception as exc:
             log_w.error("watcher error: %s", exc)
-        await asyncio.sleep(WATCHER_INTERVAL_S)   # default 60s
+        interval = 2 if _use_stream else WATCHER_INTERVAL_S
+        await asyncio.sleep(interval)   # 2s with streaming, configured otherwise
 
 
 async def _desk() -> None:
