@@ -15,23 +15,23 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 # Model map — role → tier. Same pattern as AlphaDesk.
 # ---------------------------------------------------------------------------
 
-TIERS = ["opus", "sonnet", "haiku"]
+TIERS = ["primary", "secondary", "tertiary"]
 
 MODEL_MAP: dict[str, str] = {
-    "enrichment": "haiku",
-    "scout": "sonnet",
-    "researcher": "opus",
-    "critic": "opus",
-    "judge": "opus",
-    "head": "opus",
-    "loner": "opus",
-    "plan": "sonnet",
-    "evidence": "haiku",       # news/polls/stats brief
+    "enrichment": "tertiary",
+    "scout": "secondary",
+    "researcher": "primary",
+    "critic": "primary",
+    "judge": "primary",
+    "head": "primary",
+    "loner": "primary",
+    "plan": "secondary",
+    "evidence": "tertiary",
 }
 
 if os.environ.get("CHEAP_MODELS", "1") not in ("0", "", "false", "False", "no"):
     for _r in ("critic", "judge", "loner", "head"):
-        MODEL_MAP[_r] = "sonnet"
+        MODEL_MAP[_r] = "secondary"
 
 for _role in list(MODEL_MAP):
     _override = os.environ.get(f"MODEL_{_role.upper()}")
@@ -51,16 +51,16 @@ if MODEL_PROVIDER not in MODEL_PROVIDERS:
     )
 
 PROVIDER_MODELS: dict[str, dict[str, str]] = {
-    "claude_sdk": {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"},
+    "claude_sdk": {"primary": "primary", "secondary": "secondary", "tertiary": "tertiary"},
     "kimi": {
-        "opus": os.environ.get("KIMI_MODEL_OPUS", "kimi-k2.6"),
-        "sonnet": os.environ.get("KIMI_MODEL_SONNET", "kimi-k2.6"),
-        "haiku": os.environ.get("KIMI_MODEL_HAIKU", "kimi-k2.6"),
+        "primary": os.environ.get("KIMI_MODEL_PRIMARY", "kimi-k2.6"),
+        "secondary": os.environ.get("KIMI_MODEL_SECONDARY", "kimi-k2.6"),
+        "tertiary": os.environ.get("KIMI_MODEL_TERTIARY", "kimi-k2.6"),
     },
     "deepseek": {
-        "opus": os.environ.get("DEEPSEEK_MODEL_OPUS", "deepseek-v4-pro"),
-        "sonnet": os.environ.get("DEEPSEEK_MODEL_SONNET", "deepseek-v4-flash"),
-        "haiku": os.environ.get("DEEPSEEK_MODEL_HAIKU", "deepseek-v4-flash"),
+        "primary": os.environ.get("DEEPSEEK_MODEL_PRIMARY", "deepseek-v4-pro"),
+        "secondary": os.environ.get("DEEPSEEK_MODEL_SECONDARY", "deepseek-v4-flash"),
+        "tertiary": os.environ.get("DEEPSEEK_MODEL_TERTIARY", "deepseek-v4-flash"),
     },
 }
 

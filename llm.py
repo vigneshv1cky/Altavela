@@ -7,7 +7,7 @@ Layers applied to every call:
   4. model call           one-shot, hard timeout — via the configured TRANSPORT
   5. schema validation    ranges/enums validation; ONE re-ask, then raise
   6. token accounting     per role/model/decision → ledger sink
-  7. rate-limit ladder    opus→sonnet→haiku for a window; bottom limited → breaker
+  7. rate-limit ladder    primary→secondary→tertiary for a window; bottom limited → breaker
 
 Fail-safe doctrine: a failed call raises LLMError; the call site drops that
 candidate with a logged reason. Never a phantom pick, never a retry storm.
@@ -139,7 +139,7 @@ def _concrete_model(tier_or_model: str) -> str:
 
 
 def _resolve_model(role: str) -> tuple[str, bool]:
-    base = MODEL_MAP.get(role, "sonnet")
+    base = MODEL_MAP.get(role, "secondary")
     with _state_lock:
         until = _ladder_until.get(role, 0.0)
         if time.time() < until:
@@ -155,7 +155,7 @@ def _note_rate_limit(role: str, model: str) -> None:
     with _state_lock:
         _rate_count[role] = _rate_count.get(role, 0) + 1
         current = TIERS.index(model) if model in TIERS else _base_tier_index(
-            MODEL_MAP.get(role, "sonnet")
+            MODEL_MAP.get(role, "secondary")
         )
         tier_name = TIERS[current] if current < len(TIERS) else "unknown"
         if current >= len(TIERS) - 1:
