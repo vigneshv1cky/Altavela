@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from altavela.config import DATA_DIR
+import altavela.util as util
 
 log = logging.getLogger("altavela.store")
 
@@ -204,9 +205,9 @@ def record_exit(pick_id: int, reason: str, exit_price: float | None = None) -> b
         with _connect() as conn:
             row = conn.execute("SELECT market_yes_price, market_no_price, direction FROM picks WHERE id=?", (pick_id,)).fetchone()
             if row and exit_price:
-                entry = row["market_yes_price"] if row["direction"] == "BUY_YES" else row["market_no_price"]
+                entry = util.entry_price(dict(row), row["direction"])
                 if entry and entry > 0:
-                    pnl_pct = round((exit_price - entry) / entry * 100, 2)
+                    pnl_pct = util.pnl_pct(exit_price, entry)
     except Exception:
         pass
     with _lock, _connect() as conn:
@@ -240,33 +241,27 @@ def stats() -> dict:
         wins = conn.execute(
             "SELECT COUNT(*) as n FROM picks WHERE arm='TEAM' AND resolved=1 AND outcome=1.0"
         ).fetchone()
-        # Include exited positions in performance — exit PnL > 0 = win
+        # Exited (not resolved) — count wins/losses from exit P&L
         exit_win = conn.execute(
             "SELECT COUNT(*) as n FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL AND resolved=0"
-            " AND ((direction='BUY_YES' AND exit_price > market_yes_price)"
-            "  OR  (direction='BUY_NO'  AND exit_price > market_no_price))"
+            " AND pnl_return_pct > 0"
         ).fetchone()
         exit_loss = conn.execute(
             "SELECT COUNT(*) as n FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL AND resolved=0"
-            " AND ((direction='BUY_YES' AND exit_price <= market_yes_price)"
-            "  OR  (direction='BUY_NO'  AND exit_price <= market_no_price))"
+            " AND pnl_return_pct <= 0"
         ).fetchone()
         closed = resolved["n"] + exit_win["n"] + exit_loss["n"]
         w = wins["n"] + exit_win["n"]
-        # Total P&L across all closed positions (exited + resolved)
+        # Use precomputed pnl_return_pct — avoids division by zero
         pnl = conn.execute(
-            "SELECT COALESCE(SUM(CASE WHEN direction='BUY_YES'"
-            " THEN (exit_price - market_yes_price) / market_yes_price * 100"
-            " ELSE (exit_price - market_no_price) / market_no_price * 100 END), 0) as total_pnl"
+            "SELECT COALESCE(SUM(pnl_return_pct), 0) as total_pnl"
             " FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL"
         ).fetchone()
-        # Median P&L — less sensitive to outliers than sum/avg
+        # Median P&L
         median_pnl = conn.execute(
-            "SELECT CASE WHEN direction='BUY_YES'"
-            " THEN (exit_price - market_yes_price) / market_yes_price * 100"
-            " ELSE (exit_price - market_no_price) / market_no_price * 100 END as pnl"
-            " FROM picks WHERE arm='TEAM' AND exit_ts IS NOT NULL"
-            " ORDER BY pnl"
+            "SELECT pnl_return_pct FROM picks WHERE arm='TEAM'"
+            " AND exit_ts IS NOT NULL AND pnl_return_pct IS NOT NULL"
+            " ORDER BY pnl_return_pct"
         ).fetchall()
         median = 0.0
         if median_pnl:
@@ -293,12 +288,15 @@ def markets_debated_since(hours: float) -> dict[str, dict]:
     """Return {market_id: {ts, market_yes_price, market_no_price}} for markets
     debated within the last N hours, so the scout can skip them unless the
     price has moved significantly."""
+    import datetime
+    cutoff = (datetime.datetime.now(datetime.timezone.utc)
+              - datetime.timedelta(hours=hours)).isoformat()
     with _connect() as conn:
         rows = conn.execute(
             "SELECT market_id, ts, market_yes_price, market_no_price FROM picks"
-            " WHERE arm='TEAM' AND ts >= datetime('now', ?)"
+            " WHERE arm='TEAM' AND ts >= ?"
             " ORDER BY ts DESC",
-            (f"-{hours * 3600:.0f} seconds",),
+            (cutoff,),
         ).fetchall()
     out: dict[str, dict] = {}
     for r in rows:

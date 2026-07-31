@@ -224,7 +224,7 @@ def _extract_json(text: str) -> Any:
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z]*\n?", "", text).rstrip("`").strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
+    match = re.search(r"\{.*?\}", text, re.DOTALL)
     if not match:
         raise ValueError("no JSON object in response")
     return json.loads(match.group())

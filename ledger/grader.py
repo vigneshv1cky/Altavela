@@ -12,6 +12,7 @@ import time
 
 from altavela.ingest.polymarket import market_detail
 from altavela.ledger import store
+import altavela.util as util
 
 log = logging.getLogger("altavela.grader")
 
@@ -53,7 +54,7 @@ def grade_due() -> int:
                 outcome = 1.0 if resolved_price < 0.5 else 0.0
 
             # Compute P&L: if we bought at entry_price and resolved at $1 (win) or $0 (loss)
-            entry = p.get("market_yes_price") if direction == "BUY_YES" else p.get("market_no_price")
+            entry = util.entry_price(p, p.get("direction", ""))
             pnl_pct = None
             if entry and entry > 0:
                 if outcome == 1.0:

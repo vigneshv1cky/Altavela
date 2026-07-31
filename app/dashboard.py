@@ -1,5 +1,6 @@
 """Altavela dashboard — FastAPI server for the prediction-market research desk."""
 
+import asyncio
 import json as _json
 import logging
 from pathlib import Path
@@ -12,12 +13,25 @@ from starlette.responses import StreamingResponse
 
 from altavela.ledger import store
 from altavela.llm import set_token_sink
+import altavela.util as util
 
 set_token_sink(store.token_sink)
 
 log = logging.getLogger("altavela.dashboard")
 
 _STATIC = Path(__file__).resolve().parent.parent / "app" / "static"
+
+# SSE push for live pick updates
+_live_queues: list[asyncio.Queue] = []
+
+
+def push_live_picks(data: dict) -> None:
+    """Push live pick data to all connected SSE clients (called from watcher)."""
+    for q in list(_live_queues):
+        try:
+            q.put_nowait(data)
+        except asyncio.QueueFull:
+            pass
 
 
 def create_app() -> FastAPI:
@@ -55,7 +69,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/picks")
     async def api_picks(limit: int = 20, offset: int = 0):
-        from altavela.ingest.polymarket import live_prices as pm_prices
+        from altavela.ingest.stream import get_prices as pm_prices
 
         picks = store.live_picks()
         total = len(picks)
@@ -68,11 +82,9 @@ def create_app() -> FastAPI:
             mid = p.get("market_id", "")
             yes_px, no_px = prices.get(mid, (None, None))
             direction = p.get("direction", "")
-            entry = p.get("market_yes_price") if direction == "BUY_YES" else p.get("market_no_price")
+            entry = util.entry_price(p, direction)
             cur = yes_px if direction == "BUY_YES" else no_px
-            pnl_pct = None
-            if entry and cur and entry > 0:
-                pnl_pct = round((cur - entry) / entry * 100, 1)
+            pnl_pct = util.pnl_pct(cur, entry) if cur and entry else None
 
             result.append({
                 "id": p["id"],
@@ -93,7 +105,6 @@ def create_app() -> FastAPI:
         """All picks with outcomes — for the track record."""
         rows, total = store.all_picks(limit=limit, offset=offset, exited_only=exited_only != "0")
         return {"items": rows, "total": total}
-        return rows
 
     @app.get("/api/pick/{pick_id}")
     async def api_pick(pick_id: int):
@@ -133,7 +144,7 @@ def create_app() -> FastAPI:
                 return f"data: {_json.dumps(d, default=str)}\n\n"
 
             yield _ev("status", msg="Fetching active prediction markets…")
-            markets = await loop.run_in_executor(None, lambda: fetch_markets(limit=200, min_volume=10000))
+            markets = await loop.run_in_executor(None, lambda: fetch_markets(limit=100, min_volume=10000))
             if not markets:
                 yield _ev("done", msg="No active markets found")
                 return
@@ -145,17 +156,7 @@ def create_app() -> FastAPI:
 
             # Cooldown filter
             recent = await loop.run_in_executor(None, lambda: store.markets_debated_since(REPICK_COOLDOWN_HOURS))
-            fresh_markets = []
-            for m in markets:
-                mid = m.get("id", "")
-                if mid in recent:
-                    prev = recent[mid]
-                    prices = m.get("prices", [0.5, 0.5])
-                    cur_yes = prices[0] if len(prices) > 0 else 0.5
-                    prev_yes = prev.get("yes_price") if prev.get("yes_price") is not None else 0.5
-                    if prev_yes > 0 and abs(cur_yes - prev_yes) / prev_yes * 100 < REPICK_MIN_PRICE_MOVE_PCT:
-                        continue
-                fresh_markets.append(m)
+            fresh_markets, _ = util.apply_cooldown_filter(markets, recent, REPICK_COOLDOWN_HOURS, REPICK_MIN_PRICE_MOVE_PCT)
 
             yield _ev("status", msg=f"Scout scanning {len(fresh_markets)} markets…")
             result = await loop.run_in_executor(None, scout_run, fresh_markets)
@@ -195,6 +196,25 @@ def create_app() -> FastAPI:
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache",
                                           "X-Accel-Buffering": "no"})
+
+    @app.get("/api/live-picks")
+    async def sse_live_picks(request: Request):
+        """SSE endpoint — pushes live position data with real-time P&L."""
+        queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+        _live_queues.append(queue)
+        try:
+            async def stream():
+                while not await request.is_disconnected():
+                    try:
+                        data = await asyncio.wait_for(queue.get(), timeout=30)
+                        yield f"data: {_json.dumps(data, default=str)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+            return StreamingResponse(stream(), media_type="text/event-stream",
+                                     headers={"Cache-Control": "no-cache",
+                                              "X-Accel-Buffering": "no"})
+        finally:
+            _live_queues.remove(queue)
 
     if _STATIC.exists() and (_STATIC / "index.html").exists():
         app.mount("/", StaticFiles(directory=str(_STATIC), html=True), name="static")

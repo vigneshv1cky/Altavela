@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from altavela.ledger import store
+import altavela.util as util
 
 log = logging.getLogger("altavela.math")
 
@@ -131,7 +132,7 @@ def _recent_outcomes(market_id: str, limit: int = 5) -> list[dict]:
             results = []
             for r in rows:
                 direction = r["direction"]
-                entry = r["market_yes_price"] if direction == "BUY_YES" else r["market_no_price"]
+                entry = util.entry_price(r, direction)
                 exit_px = r["exit_price"]
                 won = (exit_px > entry) if (exit_px is not None and entry is not None and entry > 0) else None
                 results.append({"direction": direction, "won": won})

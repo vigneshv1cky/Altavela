@@ -6,6 +6,7 @@ import logging
 from altavela.config import MODEL_MAP
 from altavela.desk import team
 from altavela.ledger import store
+import altavela.util as util
 
 log = logging.getLogger("altavela.debate")
 
@@ -20,7 +21,7 @@ async def deliberate(market: dict, pick: dict, evidence: list[str],
     question = pick.get("question", market.get("question", ""))
     direction = pick["direction"]
     prices = market.get("prices", [0.5, 0.5])
-    current_price = prices[0] if direction == "BUY_YES" and len(prices) > 0 else (prices[1] if len(prices) > 1 else 0.5)
+    current_price = util.current_price(prices, direction)
 
     # Researcher
     thesis = await loop.run_in_executor(

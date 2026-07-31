@@ -58,7 +58,7 @@ PROVIDER_MODELS: dict[str, dict[str, str]] = {
         "tertiary": os.environ.get("KIMI_MODEL_TERTIARY", "kimi-k2.6"),
     },
     "deepseek": {
-        "primary": os.environ.get("DEEPSEEK_MODEL_PRIMARY", "deepseek-v4-pro"),
+        "primary": os.environ.get("DEEPSEEK_MODEL_PRIMARY", "deepseek-v4-flash"),
         "secondary": os.environ.get("DEEPSEEK_MODEL_SECONDARY", "deepseek-v4-flash"),
         "tertiary": os.environ.get("DEEPSEEK_MODEL_TERTIARY", "deepseek-v4-flash"),
     },
@@ -80,12 +80,16 @@ PROVIDER_ENDPOINTS = {
 # ---------------------------------------------------------------------------
 MAX_PICKS_PER_WINDOW = 5
 LLM_MAX_INPUT_CHARS = int(os.environ.get("LLM_MAX_INPUT_CHARS", "48000"))
-LLM_MAX_CONCURRENCY = int(os.environ.get("LLM_MAX_CONCURRENCY", "4"))
 LLM_HTTP_MAX_CONCURRENCY = int(os.environ.get("LLM_HTTP_MAX_CONCURRENCY", "8"))
 LLM_TIMEOUT_S = int(os.environ.get("LLM_TIMEOUT_S", "120"))
+if LLM_TIMEOUT_S < 1:
+    raise RuntimeError("LLM_TIMEOUT_S must be >= 1")
 LLM_TOOL_TIMEOUT_S = int(os.environ.get("LLM_TOOL_TIMEOUT_S", "300"))
 LLM_TOOL_BUDGET_USD = float(os.environ.get("LLM_TOOL_BUDGET_USD", "0.50"))
 LLM_HTTP_MAX_TOKENS = int(os.environ.get("LLM_HTTP_MAX_TOKENS", "4096"))
+LLM_MAX_CONCURRENCY = int(os.environ.get("LLM_MAX_CONCURRENCY", "4"))
+if LLM_MAX_CONCURRENCY < 1:
+    raise RuntimeError("LLM_MAX_CONCURRENCY must be >= 1")
 
 # Kimi-specific (unused on deepseek, kept for compatibility)
 KIMI_THINKING = os.environ.get("KIMI_THINKING", "disabled").strip().lower()
@@ -119,32 +123,23 @@ FRICTION_BPS_PER_SIDE = 5  # tighter than stock markets
 
 # Watcher take-profit (exit when price moves this % in our favor)
 WATCHER_TAKE_PROFIT_PCT = float(os.environ.get("WATCHER_TAKE_PROFIT_PCT", "5"))
-# Trailing stop — after TP, exit if price drops this % from its peak
-WATCHER_TRAIL_PCT = float(os.environ.get("WATCHER_TRAIL_PCT", "5"))
+if WATCHER_TAKE_PROFIT_PCT <= 0:
+    raise RuntimeError("WATCHER_TAKE_PROFIT_PCT must be > 0")
+# Trailing stop — after TP, exit if price drops this % from its peak.
+# Must be less than TAKE_PROFIT_PCT to actually lock in profit.
+WATCHER_TRAIL_PCT = float(os.environ.get("WATCHER_TRAIL_PCT", "1"))
+if WATCHER_TRAIL_PCT <= 0:
+    raise RuntimeError("WATCHER_TRAIL_PCT must be > 0")
 # Stale position — exit if price moved < this % after this many hours
 WATCHER_STALE_HOURS = float(os.environ.get("WATCHER_STALE_HOURS", "4"))
 WATCHER_STALE_MOVE_PCT = float(os.environ.get("WATCHER_STALE_MOVE_PCT", "1"))
 # Stop loss — exit if price drops this % from entry
 WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "5"))
-# How often the watcher checks positions
-WATCHER_INTERVAL_S = int(os.environ.get("WATCHER_INTERVAL_S", "60"))
-if WATCHER_INTERVAL_S < 1:
-    raise RuntimeError("WATCHER_INTERVAL_S must be >= 1")
-LLM_TIMEOUT_S = int(os.environ.get("LLM_TIMEOUT_S", "120"))
-if LLM_TIMEOUT_S < 1:
-    raise RuntimeError("LLM_TIMEOUT_S must be >= 1")
-LLM_MAX_CONCURRENCY = int(os.environ.get("LLM_MAX_CONCURRENCY", "4"))
-if LLM_MAX_CONCURRENCY < 1:
-    raise RuntimeError("LLM_MAX_CONCURRENCY must be >= 1")
-WATCHER_TAKE_PROFIT_PCT = float(os.environ.get("WATCHER_TAKE_PROFIT_PCT", "5"))
-if WATCHER_TAKE_PROFIT_PCT <= 0:
-    raise RuntimeError("WATCHER_TAKE_PROFIT_PCT must be > 0")
-WATCHER_TRAIL_PCT = float(os.environ.get("WATCHER_TRAIL_PCT", "5"))
-if WATCHER_TRAIL_PCT <= 0:
-    raise RuntimeError("WATCHER_TRAIL_PCT must be > 0")
-WATCHER_STOP_PCT = float(os.environ.get("WATCHER_STOP_PCT", "5"))
 if WATCHER_STOP_PCT <= 0:
     raise RuntimeError("WATCHER_STOP_PCT must be > 0")
+WATCHER_INTERVAL_S = int(os.environ.get("WATCHER_INTERVAL_S", "2"))
+if WATCHER_INTERVAL_S < 1:
+    raise RuntimeError("WATCHER_INTERVAL_S must be >= 1")
 
 # Autorun
 AUTORUN_INTERVAL_HOURS = float(os.environ.get("AUTORUN_INTERVAL_HOURS", "0.25"))  # 15 min

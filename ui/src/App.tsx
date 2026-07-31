@@ -77,7 +77,24 @@ export default function App() {
     const tok = await fetch("/api/tokens").then(r => r.json()); setTokens(tok)
     setLoaded(true)
   }
-  useEffect(() => { refresh(); const t = setInterval(refresh, 30000); return () => clearInterval(t) }, [])
+  useEffect(() => {
+    refresh()
+    // Live P&L via SSE — pushes every 2s from the watcher
+    const es = new EventSource("/api/live-picks")
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        if (data.items) setPositions(data.items)
+      } catch {}
+    }
+    // Non-live data still polled every 5 min
+    const statsTimer = setInterval(async () => {
+      const s = await fetch("/api/stats").then(r => r.json()); setStats(s)
+      const t = await fetch("/api/timelines?limit=99999").then(r => r.json()); setTimeline(t.items)
+      const tok = await fetch("/api/tokens").then(r => r.json()); setTokens(tok)
+    }, 300000)
+    return () => { es.close(); clearInterval(statsTimer) }
+  }, [])
 
   function run() {
     setRunning(true)

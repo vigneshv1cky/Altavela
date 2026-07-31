@@ -5,7 +5,6 @@ Supports the watcher by maintaining a live price dict and calling a callback
 on every price change for active positions.
 """
 
-import asyncio
 import json
 import logging
 import threading
@@ -55,6 +54,12 @@ def get_prices(market_ids: list[str]) -> dict[str, tuple[float, float]]:
         return {mid: _prices[mid] for mid in market_ids if mid in _prices}
 
 
+def set_price(market_id: str, yes_px: float, no_px: float) -> None:
+    """Set initial prices for a market from REST before stream delivers."""
+    with _lock:
+        _prices[market_id] = (yes_px, no_px)
+
+
 def _run_stream() -> None:
     while True:
         try:
@@ -62,6 +67,104 @@ def _run_stream() -> None:
         except Exception as exc:
             log.warning("WebSocket error: %s — reconnecting in 5s", exc)
             time.sleep(5)
+
+
+def _handle_event(msg: dict, from_snapshot: bool = False) -> None:
+    """Process a single WebSocket event — book snapshot, price_change, or last_trade.
+    
+    Book events from the initial subscription response (from_snapshot=True) are
+    skipped because they show full book depth with extreme bid/ask edges, not
+    the actual best prices. REST-seeded prices from _register_stream serve as
+    the initial base; price_change events provide live updates."""
+    event_type = msg.get("event_type", "")
+
+    if event_type == "book":
+        if not from_snapshot:
+            _handle_book(msg)
+
+    elif event_type == "price_change":
+        for change in msg.get("price_changes", []):
+            _handle_price_change_item(change)
+
+    elif event_type == "last_trade_price":
+        _handle_trade_price(msg)
+
+    elif event_type == "market_resolved":
+        _handle_resolved(msg)
+
+
+def _handle_book(msg: dict) -> None:
+    """Extract best bid/ask from a book snapshot."""
+    asset_id = msg.get("asset_id", "")
+    info = _token_map.get(asset_id)
+    if not info:
+        return
+    bids = msg.get("bids", [])
+    asks = msg.get("asks", [])
+    best_bid = float(bids[0]["price"]) if bids else 0.0
+    best_ask = float(asks[0]["price"]) if asks else 0.0
+    _set_mid(info["market_id"], info["side"], best_bid, best_ask)
+
+
+def _handle_price_change_item(change: dict) -> None:
+    """Extract best bid/ask from a price_change item."""
+    asset_id = change.get("asset_id", "")
+    info = _token_map.get(asset_id)
+    if not info:
+        return
+    best_bid = float(change.get("best_bid", "0"))
+    best_ask = float(change.get("best_ask", "0"))
+    _set_mid(info["market_id"], info["side"], best_bid, best_ask)
+
+
+def _handle_trade_price(msg: dict) -> None:
+    asset_id = msg.get("asset_id", "")
+    info = _token_map.get(asset_id)
+    if not info:
+        return
+    px = float(msg.get("price") or 0)
+    if px <= 0:
+        return
+    _set_price_side(info["market_id"], info["side"], px)
+
+
+def _handle_resolved(msg: dict) -> None:
+    winning = msg.get("winning_asset_id", "")
+    asset_ids = msg.get("assets_ids", [])
+    with _lock:
+        for tid in asset_ids:
+            info = _token_map.get(tid)
+            if not info:
+                continue
+            mid = info["market_id"]
+            if mid not in _prices:
+                _prices[mid] = (0.5, 0.5)
+            prices = list(_prices[mid])
+            val = 0.999 if tid == winning else 0.001
+            if info["side"] == "yes":
+                prices[0] = val
+            else:
+                prices[1] = val
+            _prices[mid] = tuple(prices)
+
+
+def _set_mid(market_id: str, side: str, best_bid: float, best_ask: float) -> None:
+    mid = (best_bid + best_ask) / 2 if best_bid > 0 and best_ask > 0 else 0.0
+    if mid <= 0:
+        return
+    _set_price_side(market_id, side, round(mid, 4))
+
+
+def _set_price_side(market_id: str, side: str, px: float) -> None:
+    with _lock:
+        if market_id not in _prices:
+            _prices[market_id] = (0.5, 0.5)
+        prices = list(_prices[market_id])
+        if side == "yes":
+            prices[0] = round(px, 4)
+        else:
+            prices[1] = round(px, 4)
+        _prices[market_id] = tuple(prices)
 
 
 def _connect() -> None:
@@ -110,76 +213,15 @@ def _connect() -> None:
         except json.JSONDecodeError:
             continue
 
-        # Subscription confirmation comes as a list
+        # Initial subscription response is a list of book snapshots.
+        # These show full depth with extreme edges — skip them so we don't
+        # overwrite REST-seeded prices. price_change events provide live updates.
         if isinstance(msg, list):
+            for item in msg:
+                _handle_event(item, from_snapshot=True)
             continue
 
         if not isinstance(msg, dict):
             continue
 
-        event_type = msg.get("event_type", "")
-
-        # Best bid/ask — gives us real-time mid-market prices
-        if event_type == "best_bid_ask":
-            asset_id = msg.get("asset_id", "")
-            info = _token_map.get(asset_id)
-            if not info:
-                continue
-            bid = float(msg.get("best_bid", "0"))
-            ask = float(msg.get("best_ask", "0"))
-            mid = (bid + ask) / 2 if bid > 0 and ask > 0 else 0.0
-
-            mid_id = info["market_id"]
-            side = info["side"]
-            with _lock:
-                if mid_id not in _prices:
-                    _prices[mid_id] = [0.5, 0.5]
-                prices = list(_prices[mid_id])
-                if side == "yes":
-                    prices[0] = round(mid, 4)
-                else:
-                    prices[1] = round(mid, 4)
-                _prices[mid_id] = tuple(prices)
-
-        # Last trade price — more reliable than best_bid_ask for illiquid markets
-        elif event_type == "last_trade_price":
-            asset_id = msg.get("asset_id", "")
-            info = _token_map.get(asset_id)
-            if not info:
-                continue
-            px = float(msg.get("price", "0"))
-            if px <= 0:
-                continue
-
-            mid_id = info["market_id"]
-            side = info["side"]
-            with _lock:
-                if mid_id not in _prices:
-                    _prices[mid_id] = [0.5, 0.5]
-                prices = list(_prices[mid_id])
-                if side == "yes":
-                    prices[0] = round(px, 4)
-                else:
-                    prices[1] = round(px, 4)
-                _prices[mid_id] = tuple(prices)
-
-        # Market resolved
-        elif event_type == "market_resolved":
-            winning = msg.get("winning_asset_id", "")
-            # Update all tokens for this resolved market
-            asset_ids = msg.get("assets_ids", [])
-            mid_id = msg.get("id", "")
-            with _lock:
-                for tid in asset_ids:
-                    info = _token_map.get(tid)
-                    if not info:
-                        continue
-                    mid = info["market_id"]
-                    if mid not in _prices:
-                        _prices[mid] = [0.5, 0.5]
-                    prices = list(_prices[mid])
-                    if info["side"] == "yes":
-                        prices[0] = 0.999 if tid == winning else 0.001
-                    else:
-                        prices[1] = 0.999 if tid == winning else 0.001
-                    _prices[mid] = tuple(prices)
+        _handle_event(msg)
